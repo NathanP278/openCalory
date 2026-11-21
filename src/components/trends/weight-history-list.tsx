@@ -2,7 +2,7 @@
 
 import React, { useMemo } from 'react';
 import { Pencil, Plus, Scale, StickyNote, Trash2 } from 'lucide-react';
-import { db } from '@/lib/db/macroai-db';
+import { db } from '@/lib/db/opencalory-db';
 import type { DailyWeightPoint } from '@/lib/nutrition/adaptive-tdee';
 import { useLoggerStore } from '@/stores/logger-store';
 import { triggerHaptic } from '@/lib/motion';

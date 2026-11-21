@@ -4,7 +4,7 @@ import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 're
 import { AnimatePresence, motion } from 'motion/react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { ChevronLeft, ChevronRight, RotateCcw } from 'lucide-react';
-import { db } from '@/lib/db/macroai-db';
+import { db } from '@/lib/db/opencalory-db';
 import {
   EASE_EXPRESSIVE,
   SPRING_SHEET,

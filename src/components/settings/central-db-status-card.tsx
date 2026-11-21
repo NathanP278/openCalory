@@ -8,7 +8,7 @@ import {
   RefreshCw,
   ShieldCheck,
 } from 'lucide-react';
-import { db } from '@/lib/db/macroai-db';
+import { db } from '@/lib/db/opencalory-db';
 import {
   SyncAuthError,
   isCloudSyncEnabled,
@@ -66,9 +66,9 @@ export function CentralDbStatusCard() {
     if (!status) return null;
     if (status.mode === 'turso-cloud') return 'Turso Cloud (libSQL)';
     if (status.mode === 'vercel-ephemeral') {
-      return 'Ephemeral (/tmp) — Set TURSO_DATABASE_URL';
+      return 'Ephemeral (/tmp) â€” Set TURSO_DATABASE_URL';
     }
-    return status.label || 'Local SQLite (macroai.db)';
+    return status.label || 'Local SQLite (opencalory.db)';
   })();
 
   return (
@@ -207,7 +207,7 @@ export function CentralDbStatusCard() {
           </span>
           . Local dev falls back to{' '}
           <span className="font-mono text-[10px] text-foreground">
-            macroai.db
+            opencalory.db
           </span>
           .
         </p>

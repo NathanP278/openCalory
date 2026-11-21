@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { X, Sparkles, Loader2, Save, AlertCircle } from 'lucide-react';
-import { db, generateId } from '@/lib/db/macroai-db';
+import { db, generateId } from '@/lib/db/opencalory-db';
 import { compressImageToJpeg } from '@/lib/media/image-compress';
 import { SyncUnlockCard } from '@/components/auth/sync-unlock-modal';
 import { buildServingOptions } from '@/components/recipes/custom-food-modal';

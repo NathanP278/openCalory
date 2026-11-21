@@ -10,7 +10,7 @@ import {
   ChevronDown,
   ChevronUp,
 } from 'lucide-react';
-import { db, generateId } from '@/lib/db/macroai-db';
+import { db, generateId } from '@/lib/db/opencalory-db';
 import { compressImageToJpeg } from '@/lib/media/image-compress';
 import {
   getServingOptionsForFood,

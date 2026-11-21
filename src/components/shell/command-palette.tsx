@@ -26,7 +26,7 @@ import {
 import { useLoggerStore, formatHumanDate } from "@/stores/logger-store";
 import { useOptionalTheme } from "@/components/theme/theme-provider";
 import { useFocusTrap } from "@/hooks/use-focus-trap";
-import { db } from "@/lib/db/macroai-db";
+import { db } from "@/lib/db/opencalory-db";
 import { copyLogsFromDate, offsetIsoDate } from "@/lib/recipes/recipe-builder";
 import { searchStaples } from "@/lib/foods/staples-search";
 import {
@@ -362,7 +362,7 @@ function CommandPaletteDialog() {
       id: `food-${food.id}`,
       section: "Staple Foods",
       label: food.name,
-      hint: `${food.nutrientsPerBasis.calories} kcal · ${food.nutrientsPerBasis.protein}P ${food.nutrientsPerBasis.carbs}C ${food.nutrientsPerBasis.fat}F`,
+      hint: `${food.nutrientsPerBasis.calories} kcal Â· ${food.nutrientsPerBasis.protein}P ${food.nutrientsPerBasis.carbs}C ${food.nutrientsPerBasis.fat}F`,
       icon: Plus,
       onSelect: closeAnd(() => {
         setSearchInitialQuery(food.name);

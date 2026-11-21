@@ -4,7 +4,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { AnimatePresence, motion } from 'motion/react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db, generateId } from '@/lib/db/macroai-db';
+import { db, generateId } from '@/lib/db/opencalory-db';
 import { useLoggerStore } from '@/stores/logger-store';
 import { DEFAULT_RDA_MICROS, resolveGoalsForDate } from '@/lib/nutrition/goals';
 import { aggregateDailySummary } from '@/lib/nutrition/daily-summary';
@@ -157,7 +157,7 @@ export default function HomePage() {
 
   useEffect(() => {
     try {
-      const dismissed = window.localStorage?.getItem('macroai-onboard-targets-dismissed') === '1';
+      const dismissed = window.localStorage?.getItem('opencalory-onboard-targets-dismissed') === '1';
       setTargetsPromptDismissed(dismissed);
     } catch {
       setTargetsPromptDismissed(false);
@@ -433,7 +433,7 @@ export default function HomePage() {
                 Dashboard
               </h1>
               <span className="text-xs font-medium text-muted-foreground hidden sm:inline">
-                MacroAI
+                openCalory
               </span>
             </div>
             <div className="flex items-center gap-1.5 min-w-0 mt-1">
@@ -532,7 +532,7 @@ export default function HomePage() {
                   triggerHaptic(6);
                   setTargetsPromptDismissed(true);
                   try {
-                    window.localStorage?.setItem('macroai-onboard-targets-dismissed', '1');
+                    window.localStorage?.setItem('opencalory-onboard-targets-dismissed', '1');
                   } catch {
                     // Ignore storage errors
                   }
@@ -611,7 +611,7 @@ export default function HomePage() {
                     onClick={() => triggerHaptic(8)}
                     title={
                       rolling7d.rolling7dSummary.loggedDays > 0
-                        ? `7D avg ${Math.round(rolling7d.avgCalories).toLocaleString('en-US')} kcal — Open Trends`
+                        ? `7D avg ${Math.round(rolling7d.avgCalories).toLocaleString('en-US')} kcal â€” Open Trends`
                         : 'Open Trends'
                     }
                     className="touch-target tactile-press flex items-center gap-2 sm:gap-3 min-w-0 flex-1"
@@ -741,7 +741,7 @@ export default function HomePage() {
                             </div>
                             <div className="text-xs text-muted-foreground tabular-nums mt-0.5 truncate">
                               {formatEntryAmount(log.amount)} {log.unit}
-                              {entryTime ? ` · ${entryTime}` : ''}
+                              {entryTime ? ` Â· ${entryTime}` : ''}
                             </div>
                           </button>
 
@@ -757,11 +757,11 @@ export default function HomePage() {
                                 <span className="text-[var(--macro-protein)]">
                                   {Math.round(log.nutritionSnapshot?.protein ?? 0).toLocaleString()}P
                                 </span>{' '}
-                                ·{' '}
+                                Â·{' '}
                                 <span className="text-[var(--macro-carbs)]">
                                   {Math.round(log.nutritionSnapshot?.carbs ?? 0).toLocaleString()}C
                                 </span>{' '}
-                                ·{' '}
+                                Â·{' '}
                                 <span className="text-[var(--macro-fat)]">
                                   {Math.round(log.nutritionSnapshot?.fat ?? 0).toLocaleString()}F
                                 </span>

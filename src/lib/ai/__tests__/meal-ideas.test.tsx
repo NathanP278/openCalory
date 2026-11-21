@@ -14,7 +14,7 @@ import { AiMealIdeasDrawer } from '@/components/scanner/ai-meal-ideas-drawer';
 import { AiMealScannerSheet } from '@/components/scanner/ai-meal-scanner-sheet';
 import { AppShell } from '@/components/shell/app-shell';
 import { useLoggerStore } from '@/stores/logger-store';
-import { db } from '@/lib/db/macroai-db';
+import { db } from '@/lib/db/opencalory-db';
 import { DEFAULT_RDA_MICROS } from '@/lib/nutrition/goals';
 import type { FoodItem } from '@/types/nutrition';
 

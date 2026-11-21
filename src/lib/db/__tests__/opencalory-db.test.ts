@@ -1,7 +1,7 @@
 import 'fake-indexeddb/auto';
 import Dexie from 'dexie';
 import { describe, it, expect, beforeEach } from 'vitest';
-import { db } from '../macroai-db';
+import { db } from '../opencalory-db';
 import { scaleNutrition, computeMacroCalories } from '../../nutrition/scaling';
 import {
   buildCyclingPreset,
@@ -11,7 +11,7 @@ import {
 } from '../../nutrition/goals';
 import type { FoodLogEntry, CustomRecipe, UserGoals } from '@/types/nutrition';
 
-describe('MacroAIDB & Nutrition Scaling Helpers', () => {
+describe('openCaloryDB & Nutrition Scaling Helpers', () => {
   beforeEach(async () => {
     await db.delete();
     await db.open();
@@ -88,7 +88,7 @@ describe('MacroAIDB & Nutrition Scaling Helpers', () => {
     });
   });
 
-  describe('MacroAIDB Schema & Indexing', () => {
+  describe('openCaloryDB Schema & Indexing', () => {
     it('persists foodLog with immutable nutritionSnapshot and barcode lookup', async () => {
       await db.foodsCache.put({
         id: 'off:12345',
@@ -239,11 +239,11 @@ describe('MacroAIDB & Nutrition Scaling Helpers', () => {
       expect((await db.tombstones.get('foodLogs:log-1'))?.deletedAt).toBe(200);
     });
 
-    it('upgrades an existing v1 MacroAIDB database to v2 without losing v1 records', async () => {
+    it('upgrades an existing v1 openCaloryDB database to v2 without losing v1 records', async () => {
       db.close();
-      await Dexie.delete('MacroAIDB');
+      await Dexie.delete('openCaloryDB');
 
-      const v1Db = new Dexie('MacroAIDB');
+      const v1Db = new Dexie('openCaloryDB');
       v1Db.version(1).stores({
         foodLogs: 'id, date, mealSlot, foodId, createdAt',
         foodsCache: 'id, barcode, source, name, updatedAt',

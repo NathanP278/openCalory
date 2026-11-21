@@ -5,7 +5,7 @@ import { filterStaples, searchStaples, loadStaples, setStaplesCache, enrichMealI
 import { scaleNutrition } from '@/lib/nutrition/scaling';
 import { GET as usdaRouteHandler } from '@/app/api/usda/[...path]/route';
 import { NextRequest } from 'next/server';
-import { db } from '@/lib/db/macroai-db';
+import { db } from '@/lib/db/opencalory-db';
 import type { FoodItem, Micronutrients } from '@/types/nutrition';
 
 describe('USDA adapter and Staples search', () => {
@@ -59,12 +59,12 @@ describe('USDA adapter and Staples search', () => {
         { nutrientId: 1089, nutrientName: 'Iron, Fe', unitName: 'mg', value: 1.75 },
         { nutrientId: 1090, nutrientName: 'Magnesium, Mg', unitName: 'mg', value: 12 },
         { nutrientId: 1095, nutrientName: 'Zinc, Zn', unitName: 'mg', value: 1.29 },
-        { nutrientId: 1106, nutrientName: 'Vitamin A, RAE', unitName: 'µg', value: 160 },
+        { nutrientId: 1106, nutrientName: 'Vitamin A, RAE', unitName: 'Âµg', value: 160 },
         { nutrientId: 1162, nutrientName: 'Vitamin C, total ascorbic acid', unitName: 'mg', value: 0 },
-        { nutrientId: 1114, nutrientName: 'Vitamin D (D2 + D3)', unitName: 'µg', value: 2 },
+        { nutrientId: 1114, nutrientName: 'Vitamin D (D2 + D3)', unitName: 'Âµg', value: 2 },
         { nutrientId: 1175, nutrientName: 'Vitamin B-6', unitName: 'mg', value: 0.17 },
-        { nutrientId: 1178, nutrientName: 'Vitamin B-12', unitName: 'µg', value: 0.89 },
-        { nutrientId: 1177, nutrientName: 'Folate, total', unitName: 'µg', value: 47 },
+        { nutrientId: 1178, nutrientName: 'Vitamin B-12', unitName: 'Âµg', value: 0.89 },
+        { nutrientId: 1177, nutrientName: 'Folate, total', unitName: 'Âµg', value: 47 },
       ],
     });
 

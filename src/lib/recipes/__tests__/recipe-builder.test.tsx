@@ -2,7 +2,7 @@ import 'fake-indexeddb/auto';
 import React, { act } from 'react';
 import { describe, test, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { db } from '@/lib/db/macroai-db';
+import { db } from '@/lib/db/opencalory-db';
 import {
   copyLogsFromDate,
   copyYesterdayLogs,
@@ -668,7 +668,7 @@ describe('Recipe Builder, Date Copy & Unified Log Views', () => {
       const cookedInput = screen.getByLabelText(/^cooked weight \(g\)$/i);
       fireEvent.change(cookedInput, { target: { value: '150' } });
 
-      // Yield readout: 150g cooked / 200g raw · 75% yield
+      // Yield readout: 150g cooked / 200g raw Â· 75% yield
       expect(screen.getByText(/150g cooked \/ 200g raw/i)).toBeInTheDocument();
       expect(screen.getByText(/75% yield/i)).toBeInTheDocument();
 

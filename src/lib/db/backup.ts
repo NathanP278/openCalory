@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { db } from './macroai-db';
+import { db } from './opencalory-db';
 import { isCloudSyncEnabled, syncWithCentralDb } from './cloud-sync';
 import type {
   FoodLogEntry,
@@ -201,7 +201,7 @@ export const CentralTablesSyncSchema = z.object({
   tombstones: z.array(SyncTombstoneSchema).default([]),
 });
 
-export const MacroAIBackupV1Schema = z.object({
+export const OpenCaloryBackupV1Schema = z.object({
   version: z.literal(1),
   exportedAt: z.number(),
   tables: z.object({
@@ -212,7 +212,7 @@ export const MacroAIBackupV1Schema = z.object({
   }),
 });
 
-export const MacroAIBackupV2Schema = z.object({
+export const OpenCaloryBackupV2Schema = z.object({
   version: z.literal(2),
   exportedAt: z.number(),
   tables: z.object({
@@ -225,13 +225,13 @@ export const MacroAIBackupV2Schema = z.object({
   }),
 });
 
-export const MacroAIBackupSchema = z.discriminatedUnion('version', [
-  MacroAIBackupV1Schema,
-  MacroAIBackupV2Schema,
+export const OpenCaloryBackupSchema = z.discriminatedUnion('version', [
+  OpenCaloryBackupV1Schema,
+  OpenCaloryBackupV2Schema,
 ]);
 
-export type MacroAIBackup = z.infer<typeof MacroAIBackupSchema>;
-export type MacroAIBackupV2 = z.infer<typeof MacroAIBackupV2Schema>;
+export type OpenCaloryBackup = z.infer<typeof OpenCaloryBackupSchema>;
+export type OpenCaloryBackupV2 = z.infer<typeof OpenCaloryBackupV2Schema>;
 
 export interface ImportBackupResult {
   importedCounts: {
@@ -261,7 +261,7 @@ export async function exportBackupJson(): Promise<string> {
       db.pinnedFoods.toArray(),
     ]);
 
-  const backupData: MacroAIBackupV2 = {
+  const backupData: OpenCaloryBackupV2 = {
     version: 2,
     exportedAt: Date.now(),
     tables: {
@@ -278,7 +278,7 @@ export async function exportBackupJson(): Promise<string> {
 }
 
 /**
- * Validates and imports a JSON backup string (v1 or v2) into MacroAIDB.
+ * Validates and imports a JSON backup string (v1 or v2) into openCaloryDB.
  *
  * Pre-validation:
  * Strictly parses and validates with Zod (version 1 or 2, tables schema) BEFORE
@@ -303,7 +303,7 @@ export async function importBackupJson(
   }
 
   // 2. Validate strictly with Zod before touching IndexedDB
-  const validated = MacroAIBackupSchema.parse(parsed);
+  const validated = OpenCaloryBackupSchema.parse(parsed);
   const { foodLogs, foodsCache, customRecipes, userGoals } = validated.tables;
   const weightLogs = validated.version === 2 ? validated.tables.weightLogs : [];
   const pinnedFoods = validated.version === 2 ? validated.tables.pinnedFoods : [];

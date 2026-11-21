@@ -1,7 +1,7 @@
 import React from 'react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { db } from '@/lib/db/macroai-db';
+import { db } from '@/lib/db/opencalory-db';
 import { useLoggerStore } from '@/stores/logger-store';
 import { WeighInDrawer } from '../weigh-in-drawer';
 import { AppleHealthShortcutCard } from '@/components/settings/apple-health-shortcut-card';

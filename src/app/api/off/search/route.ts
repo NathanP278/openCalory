@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
     const upstreamRes = await fetch(targetUrl.toString(), {
       method: 'GET',
       headers: {
-        'User-Agent': 'MacroAI/1.0 (https://macroai.local)',
+        'User-Agent': 'openCalory/1.0 (https://opencalory.local)',
         Accept: 'application/json',
       },
       signal: controller.signal,

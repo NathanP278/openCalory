@@ -147,7 +147,7 @@ export function BootSplashOverlay({
         {/* Brand Wordmark + Live Status Pill */}
         <div className="flex flex-col items-center gap-2 text-center boot-copy-enter">
           <span className="text-2xl font-bold tracking-tight text-foreground">
-            MacroAI
+            openCalory
           </span>
           <span className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full surface-glass-pill text-xs font-medium text-muted-foreground tabular-nums">
             <span

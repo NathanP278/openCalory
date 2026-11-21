@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { X, RefreshCw, Zap, AlertCircle, RotateCcw } from 'lucide-react';
-import { db, generateId } from '@/lib/db/macroai-db';
+import { db, generateId } from '@/lib/db/opencalory-db';
 import { computeMacroCalories } from '@/lib/nutrition/scaling';
 import { useLoggerStore, formatHumanDate } from '@/stores/logger-store';
 import {
@@ -193,7 +193,7 @@ function QuickAddContent({ date, mealSlot, onClose }: QuickAddContentProps) {
     if (safeCal > 10000 && !confirmHighCalories) {
       setConfirmHighCalories(true);
       setErrorMessage(
-        `Double-check ${Math.round(safeCal).toLocaleString()} kcal — tap "Confirm & Log" if this entry is intentional.`
+        `Double-check ${Math.round(safeCal).toLocaleString()} kcal â€” tap "Confirm & Log" if this entry is intentional.`
       );
       return;
     }

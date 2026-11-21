@@ -19,7 +19,7 @@ import {
   Layers,
   ChefHat,
 } from 'lucide-react';
-import { db, generateId } from '@/lib/db/macroai-db';
+import { db, generateId } from '@/lib/db/opencalory-db';
 import {
   formatPortionUnit,
   getServingOptionsForFood,
@@ -80,13 +80,13 @@ function formatFoodBasisLabel(item: FoodItem): string {
   if (item.basis === 'perServing') {
     const count = item.servingSize > 0 ? item.servingSize : 1;
     const unitLabel = formatPortionUnit(count, item.servingUnit || 'serving');
-    const gramNote = item.servingWeightGrams ? ` · ${item.servingWeightGrams}g` : '';
+    const gramNote = item.servingWeightGrams ? ` Â· ${item.servingWeightGrams}g` : '';
     return `(per ${count} ${unitLabel}${gramNote})`;
   }
   if (item.basis === 'per100ml') {
-    return firstOpt ? `(per 100ml · 1 ${firstOpt.unit} = ${firstOpt.grams}ml)` : '(per 100ml)';
+    return firstOpt ? `(per 100ml Â· 1 ${firstOpt.unit} = ${firstOpt.grams}ml)` : '(per 100ml)';
   }
-  return firstOpt ? `(per 100g · 1 ${firstOpt.unit} = ${firstOpt.grams}g)` : '(per 100g)';
+  return firstOpt ? `(per 100g Â· 1 ${firstOpt.unit} = ${firstOpt.grams}g)` : '(per 100g)';
 }
 
 function formatRecipeBasisLabel(recipe: CustomRecipe): string {
@@ -100,11 +100,11 @@ function formatRecipeBasisLabel(recipe: CustomRecipe): string {
 
   if (recipe.basis === 'perServing') {
     return perServingGrams > 0
-      ? `(per 1 serving · ${perServingGrams}g)`
+      ? `(per 1 serving Â· ${perServingGrams}g)`
       : '(per 1 serving)';
   }
   return perServingGrams > 0
-    ? `(per 100g · 1 serving = ${perServingGrams}g)`
+    ? `(per 100g Â· 1 serving = ${perServingGrams}g)`
     : '(per 100g)';
 }
 

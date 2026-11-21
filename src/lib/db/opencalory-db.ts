@@ -10,7 +10,7 @@ import type {
 } from '@/types/nutrition';
 import { createCentralSyncMiddleware } from './cloud-sync';
 
-export class MacroAIDB extends Dexie {
+export class OpenCaloryDB extends Dexie {
   foodLogs!: Table<FoodLogEntry, string>;
   foodsCache!: Table<FoodItem, string>;
   customRecipes!: Table<CustomRecipe, string>;
@@ -20,7 +20,7 @@ export class MacroAIDB extends Dexie {
   tombstones!: Table<SyncTombstone, string>;
 
   constructor() {
-    super('MacroAIDB');
+    super('openCaloryDB');
     this.version(1).stores({
       foodLogs: 'id, date, mealSlot, foodId, createdAt',
       foodsCache: 'id, barcode, source, name, updatedAt',
@@ -38,4 +38,4 @@ export class MacroAIDB extends Dexie {
 
 export const generateId = (): string => crypto.randomUUID();
 
-export const db = new MacroAIDB();
+export const db = new OpenCaloryDB();

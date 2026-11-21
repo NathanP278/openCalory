@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import { NextResponse } from 'next/server';
 
-export const SYNC_SESSION_COOKIE = 'macroai_sync_session';
+export const SYNC_SESSION_COOKIE = 'opencalory_sync_session';
 export const SYNC_SESSION_MAX_AGE_SECONDS = 2_592_000; // 30 days
 
 export const NO_STORE_HEADERS = {

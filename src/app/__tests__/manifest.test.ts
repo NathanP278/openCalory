@@ -8,10 +8,10 @@ import { PwaRegister } from '@/components/shell/pwa-register';
 
 describe('Task 13: Manifest, Service Worker & PwaRegister', () => {
   describe('manifest.ts', () => {
-    it('returns standalone PWA manifest for MacroAI', () => {
+    it('returns standalone PWA manifest for openCalory', () => {
       const m = manifest();
-      expect(m.name).toBe('MacroAI');
-      expect(m.short_name).toBe('MacroAI');
+      expect(m.name).toBe('openCalory');
+      expect(m.short_name).toBe('openCalory');
       expect(m.description).toBe('Offline-first, adherence-neutral calorie & macro tracking PWA');
       expect(m.start_url).toBe('/');
       expect(m.display).toBe('standalone');
@@ -68,7 +68,7 @@ describe('Task 13: Manifest, Service Worker & PwaRegister', () => {
       const sw = fs.readFileSync(swPath, 'utf-8');
 
       // Version bump
-      expect(sw).toContain("CACHE_NAME = 'macroai-v2'");
+      expect(sw).toContain("CACHE_NAME = 'opencalory-v2'");
 
       // Precache assets
       const precacheMatch = sw.match(/const\s+PRECACHE_ASSETS\s*=\s*\[([\s\S]*?)\]/);
@@ -105,7 +105,7 @@ describe('Task 13: Manifest, Service Worker & PwaRegister', () => {
         sw
       );
       const fakeSelf = {
-        location: { origin: 'https://macroai.test' },
+        location: { origin: 'https://opencalory.test' },
         addEventListener: (type: string, cb: (event: unknown) => void) => {
           listeners[type] = cb;
         },
@@ -121,7 +121,7 @@ describe('Task 13: Manifest, Service Worker & PwaRegister', () => {
 
       let respondedPromise: Promise<unknown> | undefined;
       listeners.fetch({
-        request: { method: 'GET', url: 'https://macroai.test/data/ph-foods.json' },
+        request: { method: 'GET', url: 'https://opencalory.test/data/ph-foods.json' },
         respondWith: (p: Promise<unknown>) => {
           respondedPromise = p;
         },

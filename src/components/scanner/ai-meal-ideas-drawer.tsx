@@ -11,7 +11,7 @@ import {
   ArrowRight,
   UtensilsCrossed,
 } from 'lucide-react';
-import { db, generateId } from '@/lib/db/macroai-db';
+import { db, generateId } from '@/lib/db/opencalory-db';
 import { useLoggerStore, formatHumanDate, type AiDraftItem } from '@/stores/logger-store';
 import { DEFAULT_RDA_MICROS, resolveGoalsForDate } from '@/lib/nutrition/goals';
 import { aggregateDailySummary } from '@/lib/nutrition/daily-summary';
@@ -518,7 +518,7 @@ export function AiMealIdeasDrawer({ open, date, onClose }: AiMealIdeasDrawerProp
                           />
                           <span>{item.name}</span>
                           <span className="text-muted-foreground">
-                            · {Math.round(item.grams)}g
+                            Â· {Math.round(item.grams)}g
                           </span>
                         </span>
                       ))}

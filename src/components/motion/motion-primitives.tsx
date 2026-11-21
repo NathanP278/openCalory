@@ -30,7 +30,7 @@ import {
 export function MotionRoot({ children }: { children: React.ReactNode }) {
   return (
     <MotionConfig reducedMotion="user" transition={SPRING_EXPRESSIVE}>
-      <LayoutGroup id="macroai-root">{children}</LayoutGroup>
+      <LayoutGroup id="opencalory-root">{children}</LayoutGroup>
     </MotionConfig>
   );
 }

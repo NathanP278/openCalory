@@ -20,7 +20,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "MacroAI - Adherence-Neutral Macro & Calorie Tracker",
+  title: "openCalory - Adherence-Neutral Macro & Calorie Tracker",
   description: "100% free, offline-first calorie and macro tracking with AI meal scanning and adherence-neutral analytics.",
   manifest: "/manifest.webmanifest",
   icons: {
@@ -33,7 +33,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "MacroAI",
+    title: "openCalory",
   },
   formatDetection: {
     telephone: false,

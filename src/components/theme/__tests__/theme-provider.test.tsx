@@ -57,11 +57,11 @@ describe('ThemeProvider', () => {
     expect(screen.getByTestId('resolvedTheme')).toHaveTextContent('light');
     expect(document.documentElement.classList.contains('light')).toBe(true);
     expect(document.documentElement.classList.contains('dark')).toBe(false);
-    expect(localStorage.getItem('macroai-theme')).toBe('light');
+    expect(localStorage.getItem('opencalory-theme')).toBe('light');
   });
 
   it('loads saved theme preference from localStorage', () => {
-    localStorage.setItem('macroai-theme', 'light');
+    localStorage.setItem('opencalory-theme', 'light');
 
     render(
       <ThemeProvider>

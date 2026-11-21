@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { ArrowRight, Check, Sparkles, X } from 'lucide-react';
-import { db } from '@/lib/db/macroai-db';
+import { db } from '@/lib/db/opencalory-db';
 import {
   applyWeeklyCheckInToGoals,
   type WeeklyCheckInProposal,

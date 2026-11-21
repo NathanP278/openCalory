@@ -1,5 +1,5 @@
-// MacroAI Vanilla PWA Service Worker (Zero-dependency, Next.js 16 Turbopack compatible)
-const CACHE_NAME = 'macroai-v2';
+// openCalory Vanilla PWA Service Worker (Zero-dependency, Next.js 16 Turbopack compatible)
+const CACHE_NAME = 'opencalory-v2';
 
 const PRECACHE_ASSETS = [
   '/',

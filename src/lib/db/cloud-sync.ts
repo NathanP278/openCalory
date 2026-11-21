@@ -5,7 +5,7 @@ import Dexie, {
   type DBCoreTable,
   type Middleware,
 } from 'dexie';
-import type { MacroAIDB } from './macroai-db';
+import type { OpenCaloryDB } from './opencalory-db';
 import type {
   CustomRecipe,
   FoodItem,
@@ -38,9 +38,9 @@ const SYNC_TABLES = new Set<CentralTableName>([
   'pinnedFoods',
 ]);
 
-const MIGRATED_KEY = 'macroai_central_migrated_v1';
-const DIRTY_SYNC_KEY = 'macroai_dirty_sync';
-export const PENDING_REPLACE_SYNC_KEY = 'macroai_pending_replace_sync';
+const MIGRATED_KEY = 'opencalory_central_migrated_v1';
+const DIRTY_SYNC_KEY = 'opencalory_dirty_sync';
+export const PENDING_REPLACE_SYNC_KEY = 'opencalory_pending_replace_sync';
 
 let forceEnableInTests = false;
 let isHydratingFromServer = false;
@@ -177,7 +177,7 @@ export async function flushPendingMutationsForTests(): Promise<void> {
 }
 
 export function createCentralSyncMiddleware(
-  getDb: () => MacroAIDB
+  getDb: () => OpenCaloryDB
 ): Middleware<DBCore> {
   return {
     stack: 'dbcore',
@@ -311,7 +311,7 @@ export function createCentralSyncMiddleware(
 }
 
 async function runSyncWithCentralDb(
-  dbInstance: MacroAIDB,
+  dbInstance: OpenCaloryDB,
   options?: { forcePushMode?: 'merge' | 'replace' }
 ): Promise<CentralSyncResult> {
   if (options?.forcePushMode === 'replace') {
@@ -499,7 +499,7 @@ async function runSyncWithCentralDb(
 }
 
 export async function syncWithCentralDb(
-  dbInstance: MacroAIDB,
+  dbInstance: OpenCaloryDB,
   options?: { forcePushMode?: 'merge' | 'replace' }
 ): Promise<CentralSyncResult> {
   if (options?.forcePushMode === 'replace') {

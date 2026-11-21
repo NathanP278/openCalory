@@ -4,7 +4,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { AlertCircle, Calendar, Check, CopyPlus, X } from 'lucide-react';
-import { db } from '@/lib/db/macroai-db';
+import { db } from '@/lib/db/opencalory-db';
 import { copyLogsFromDate, offsetIsoDate } from '@/lib/recipes/recipe-builder';
 import { useLoggerStore, formatHumanDate } from '@/stores/logger-store';
 import {
@@ -246,7 +246,7 @@ function CopyFromDateContent({
             <div className="flex items-center justify-between gap-2 px-1 text-xs">
               <span className="text-muted-foreground tabular-nums">
                 <strong className="text-foreground">{selectedEntries.length}</strong> of{' '}
-                {entries.length} selected ·{' '}
+                {entries.length} selected Â·{' '}
                 <strong className="text-[var(--macro-calories)]">
                   {selectedCalories.toLocaleString()} kcal
                 </strong>
@@ -316,11 +316,11 @@ function CopyFromDateContent({
                           <span className="text-[var(--macro-protein)]">
                             {Math.round(snap?.protein ?? 0)}P
                           </span>{' '}
-                          ·{' '}
+                          Â·{' '}
                           <span className="text-[var(--macro-carbs)]">
                             {Math.round(snap?.carbs ?? 0)}C
                           </span>{' '}
-                          ·{' '}
+                          Â·{' '}
                           <span className="text-[var(--macro-fat)]">
                             {Math.round(snap?.fat ?? 0)}F
                           </span>

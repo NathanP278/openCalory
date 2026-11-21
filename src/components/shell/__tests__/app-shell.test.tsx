@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { AppShell } from '../app-shell';
 import { useLoggerStore, type LogSheetType } from '@/stores/logger-store';
-import { db } from '@/lib/db/macroai-db';
+import { db } from '@/lib/db/opencalory-db';
 import HomePage from '@/app/page';
 import LogPage from '@/app/log/page';
 import RecipesPage from '@/app/recipes/page';

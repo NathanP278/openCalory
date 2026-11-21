@@ -15,7 +15,7 @@ import {
   SlidersHorizontal,
   RotateCcw,
 } from 'lucide-react';
-import { db } from '@/lib/db/macroai-db';
+import { db } from '@/lib/db/opencalory-db';
 import {
   calculateMifflinStJeorTargets,
   DEFAULT_RDA_MICROS,
@@ -472,7 +472,7 @@ export function GoalsCalculatorForm() {
             </span>
             {!hasSavedGoals && targetMode === 'calculator' && (
               <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-card text-muted-foreground border border-border/60">
-                Unsaved · Dashboard is on {activeTargets.calories.toLocaleString()} kcal default
+                Unsaved Â· Dashboard is on {activeTargets.calories.toLocaleString()} kcal default
               </span>
             )}
             {hasSavedGoals && lastCheckInAt && (
@@ -683,7 +683,7 @@ export function GoalsCalculatorForm() {
                 />
                 {touched.age && (age < 12 || age > 120) && (
                   <p className="text-[11px] text-[var(--neutral-over)] mt-1">
-                    Typical adult range: 12–120 years.
+                    Typical adult range: 12â€“120 years.
                   </p>
                 )}
               </div>
@@ -713,7 +713,7 @@ export function GoalsCalculatorForm() {
                 />
                 {touched.weightKg && (weightKg < 30 || weightKg > 300) && (
                   <p className="text-[11px] text-[var(--neutral-over)] mt-1">
-                    Typical range: 30–300 kg.
+                    Typical range: 30â€“300 kg.
                   </p>
                 )}
               </div>
@@ -742,7 +742,7 @@ export function GoalsCalculatorForm() {
                 />
                 {touched.heightCm && (heightCm < 100 || heightCm > 250) && (
                   <p className="text-[11px] text-[var(--neutral-over)] mt-1">
-                    Typical range: 100–250 cm.
+                    Typical range: 100â€“250 cm.
                   </p>
                 )}
               </div>
@@ -807,7 +807,7 @@ export function GoalsCalculatorForm() {
                 {touched.proteinPerKg &&
                   (proteinPerKg < 1.0 || proteinPerKg > 3.5) && (
                     <p className="text-[11px] text-[var(--neutral-over)] mt-1">
-                      Recommended protein calibration band: 1.0–3.5 g/kg.
+                      Recommended protein calibration band: 1.0â€“3.5 g/kg.
                     </p>
                   )}
               </div>
@@ -821,8 +821,8 @@ export function GoalsCalculatorForm() {
                   {calculatedTargets.dailyCalories.toLocaleString()} kcal
                 </strong>{' '}
                 <span>
-                  ({calculatedTargets.proteinG}P · {calculatedTargets.carbsG}C ·{' '}
-                  {calculatedTargets.fatG}F · {calculatedTargets.fiberG}g fiber)
+                  ({calculatedTargets.proteinG}P Â· {calculatedTargets.carbsG}C Â·{' '}
+                  {calculatedTargets.fatG}F Â· {calculatedTargets.fiberG}g fiber)
                 </span>
                 {formulaDiffersFromActive && (
                   <p className="text-[11px] text-[var(--neutral-over)] mt-0.5">
@@ -991,8 +991,8 @@ export function GoalsCalculatorForm() {
                 </span>
                 <span className="block text-[11px] text-muted-foreground tabular-nums">
                   {weeklyCyclingEnabled
-                    ? `Enabled · 7-day avg ${weeklyAverage.calories.toLocaleString()} kcal`
-                    : 'Optional Mon–Sun daily target schedule'}
+                    ? `Enabled Â· 7-day avg ${weeklyAverage.calories.toLocaleString()} kcal`
+                    : 'Optional Monâ€“Sun daily target schedule'}
                 </span>
               </div>
             </div>

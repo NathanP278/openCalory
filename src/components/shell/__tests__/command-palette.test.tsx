@@ -3,7 +3,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { CommandPalette } from '../command-palette';
 import { useLoggerStore } from '@/stores/logger-store';
-import { db } from '@/lib/db/macroai-db';
+import { db } from '@/lib/db/opencalory-db';
 
 describe('CommandPalette', () => {
   beforeEach(async () => {

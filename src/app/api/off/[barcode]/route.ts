@@ -29,7 +29,7 @@ export async function GET(
   try {
     const upstreamRes = await fetch(targetUrl, {
       headers: {
-        'User-Agent': 'MacroAI/1.0',
+        'User-Agent': 'openCalory/1.0',
       },
       next: { revalidate: 86400 },
       signal: AbortSignal.timeout(8000),

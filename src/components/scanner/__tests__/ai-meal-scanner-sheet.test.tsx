@@ -2,7 +2,7 @@ import 'fake-indexeddb/auto';
 import { describe, test, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import { useLoggerStore, type AiDraftItem } from '@/stores/logger-store';
-import { db } from '@/lib/db/macroai-db';
+import { db } from '@/lib/db/opencalory-db';
 import { AiMealScannerSheet, tryDeterministicRefine } from '../ai-meal-scanner-sheet';
 import { AppShell } from '@/components/shell/app-shell';
 import type { FoodItem } from '@/types/nutrition';

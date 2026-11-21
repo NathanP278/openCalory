@@ -1,4 +1,4 @@
-import { db, generateId } from '@/lib/db/macroai-db';
+import { db, generateId } from '@/lib/db/opencalory-db';
 import {
   formatPortionUnit,
   getServingOptionsForFood,

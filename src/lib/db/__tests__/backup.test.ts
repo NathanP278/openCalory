@@ -1,6 +1,6 @@
 import 'fake-indexeddb/auto';
 import { describe, it, expect, beforeEach } from 'vitest';
-import { db } from '../macroai-db';
+import { db } from '../opencalory-db';
 import { exportBackupJson, importBackupJson } from '../backup';
 import type {
   FoodLogEntry,
@@ -80,7 +80,7 @@ describe('JSON Backup Export & Transactional Import', () => {
     expect((await db.userGoals.get('active'))?.dailyCalories).toBe(2500);
   });
 
-  it('corrupt JSON leaves existing MacroAIDB tables untouched', async () => {
+  it('corrupt JSON leaves existing openCaloryDB tables untouched', async () => {
     await db.userGoals.put({
       id: 'active',
       dailyCalories: 2500,

@@ -11,7 +11,7 @@ interface ThemeContextType {
   resolvedTheme: ResolvedTheme;
 }
 
-const STORAGE_KEY = "macroai-theme";
+const STORAGE_KEY = "opencalory-theme";
 const DEFAULT_THEME: Theme = "dark";
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);

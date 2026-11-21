@@ -1,7 +1,7 @@
 import 'fake-indexeddb/auto';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
-import { db } from '@/lib/db/macroai-db';
+import { db } from '@/lib/db/opencalory-db';
 import { BarcodeScannerDrawer } from '../barcode-scanner-drawer';
 import { CustomFoodModal } from '@/components/recipes/custom-food-modal';
 import { getServingOptionsForFood, scaleFoodByOption } from '@/lib/nutrition/scaling';

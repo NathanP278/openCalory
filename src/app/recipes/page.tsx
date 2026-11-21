@@ -3,7 +3,7 @@
 import React, { useState, useMemo } from 'react';
 import { motion } from 'motion/react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db, generateId } from '@/lib/db/macroai-db';
+import { db, generateId } from '@/lib/db/opencalory-db';
 import { AppShell } from '@/components/shell/app-shell';
 import { SettingsHeaderLink } from '@/components/shell/settings-header-link';
 import { RecipeBuilderModal } from '@/components/recipes/recipe-builder-modal';
@@ -490,13 +490,13 @@ export default function RecipesPage() {
                               {recipe.ingredients?.length || 0} ingredient
                               {recipe.ingredients?.length === 1 ? '' : 's'}
                             </span>
-                            <span>·</span>
+                            <span>Â·</span>
                             <span>
                               {recipe.basis === 'perServing'
                                 ? `${recipe.defaultServings} serving${recipe.defaultServings > 1 ? 's' : ''}`
                                 : 'per 100g'}
                             </span>
-                            <span>·</span>
+                            <span>Â·</span>
                             <span>{recipe.totalGrams}g raw</span>
                           </div>
                           {hasCookedWeight && (
@@ -607,7 +607,7 @@ export default function RecipesPage() {
                                 .map((ing) => ing.name)
                                 .filter(Boolean)
                                 .slice(0, 4)
-                                .join(' · ') +
+                                .join(' Â· ') +
                               (recipe.ingredients.length > 4
                                 ? ` +${recipe.ingredients.length - 4}`
                                 : '')

@@ -12,7 +12,7 @@ import {
   StickyNote,
   X,
 } from 'lucide-react';
-import { db } from '@/lib/db/macroai-db';
+import { db } from '@/lib/db/opencalory-db';
 import { loadStaples } from '@/lib/foods/staples-search';
 import {
   computeMacroCalories,
@@ -586,7 +586,7 @@ function EditLogEntryContent({
                 {directMacroEdit ? directName.trim() || entry.name : entry.name}
               </h2>
               <p className="text-[11px] text-muted-foreground uppercase tracking-wider">
-                {entry.source.replace('_', ' ')} · {logDate || entry.date}
+                {entry.source.replace('_', ' ')} Â· {logDate || entry.date}
               </p>
             </div>
           </div>

@@ -10,7 +10,7 @@ import {
   RefreshCw,
   Smartphone,
 } from 'lucide-react';
-import { db } from '@/lib/db/macroai-db';
+import { db } from '@/lib/db/opencalory-db';
 import { getTodayIsoDate } from '@/stores/logger-store';
 import { KG_TO_LB } from '@/components/weight/weigh-in-drawer';
 import { triggerHaptic } from '@/lib/motion';
@@ -21,7 +21,7 @@ export function AppleHealthShortcutCard() {
   const [copiedField, setCopiedField] = useState<'url' | 'header' | 'steps' | null>(
     null
   );
-  const [origin, setOrigin] = useState('https://your-macroai.vercel.app');
+  const [origin, setOrigin] = useState('https://your-opencalory.vercel.app');
 
   useEffect(() => {
     if (typeof window !== 'undefined' && window.location?.origin) {
@@ -108,8 +108,8 @@ export function AppleHealthShortcutCard() {
   const shortcutStepsText = [
     `1. Get Contents of URL: ${endpointUrl} (Method: GET, Header -> ${authHeaderSnippet}). Only returns weigh-ins logged for today's date (ignoring backfilled past entries).`,
     `2. Get Dictionary Value for "id", "weight_kg" (or "weight_lb"), and "recorded_at". If "id" has no value (null when no weigh-in is logged today), stop.`,
-    `3. Deduplicate via iCloud Drive: Get File from iCloud Drive at "Shortcuts/macroai-last-weight-id.txt" (disable Error If Not Found).`,
-    `4. If "id" has any value and File does not match "id": Log Health Sample (Type: Weight, Value: weight_kg, Date: recorded_at) and Save "id" to "Shortcuts/macroai-last-weight-id.txt" (Overwrite).`,
+    `3. Deduplicate via iCloud Drive: Get File from iCloud Drive at "Shortcuts/opencalory-last-weight-id.txt" (disable Error If Not Found).`,
+    `4. If "id" has any value and File does not match "id": Log Health Sample (Type: Weight, Value: weight_kg, Date: recorded_at) and Save "id" to "Shortcuts/opencalory-last-weight-id.txt" (Overwrite).`,
   ].join('\n');
 
   return (
@@ -295,7 +295,7 @@ export function AppleHealthShortcutCard() {
             <span className="text-foreground font-medium">
               iCloud Drive Deduplication:
             </span>{' '}
-            Read <code className="font-mono text-[10px]">Shortcuts/macroai-last-weight-id.txt</code>{' '}
+            Read <code className="font-mono text-[10px]">Shortcuts/opencalory-last-weight-id.txt</code>{' '}
             from iCloud Drive (with <em>Error If Not Found</em> turned off).
           </li>
           <li>

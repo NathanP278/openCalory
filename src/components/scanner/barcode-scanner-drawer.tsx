@@ -13,7 +13,7 @@ import {
   Plus,
   Edit,
 } from 'lucide-react';
-import { db, generateId } from '@/lib/db/macroai-db';
+import { db, generateId } from '@/lib/db/opencalory-db';
 import {
   getServingOptionsForFood,
   scaleFoodByOption,

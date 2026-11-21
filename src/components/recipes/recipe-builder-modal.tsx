@@ -10,7 +10,7 @@ import {
 } from '@/lib/recipes/recipe-builder';
 
 export { foodLogEntryToRecipeIngredient, foodLogEntriesToRecipeIngredients };
-import { db } from '@/lib/db/macroai-db';
+import { db } from '@/lib/db/opencalory-db';
 import { scaleNutrition } from '@/lib/nutrition/scaling';
 import { searchStaples, filterStaples } from '@/lib/foods/staples-search';
 import { searchUsdaFoods } from '@/lib/foods/usda-adapter';
@@ -802,7 +802,7 @@ export function RecipeBuilderModal({
                 <div className="text-[11px] text-muted-foreground tabular-nums font-medium">
                   {effectiveCookedWeightGrams && totals.totalGrams > 0 ? (
                     <span>
-                      {effectiveCookedWeightGrams}g cooked / {totals.totalGrams}g raw ·{' '}
+                      {effectiveCookedWeightGrams}g cooked / {totals.totalGrams}g raw Â·{' '}
                       {Math.round((effectiveCookedWeightGrams / totals.totalGrams) * 100)}% yield
                     </span>
                   ) : (
@@ -873,9 +873,9 @@ export function RecipeBuilderModal({
                     <div className="min-w-0 flex-1 pr-2">
                       <div className="font-medium text-foreground truncate">{ing.name}</div>
                       <div className="text-[11px] text-muted-foreground tabular-nums">
-                        {Math.round(ing.nutritionSnapshot.calories)} kcal ·{' '}
-                        {Math.round(ing.nutritionSnapshot.protein)}P ·{' '}
-                        {Math.round(ing.nutritionSnapshot.carbs)}C ·{' '}
+                        {Math.round(ing.nutritionSnapshot.calories)} kcal Â·{' '}
+                        {Math.round(ing.nutritionSnapshot.protein)}P Â·{' '}
+                        {Math.round(ing.nutritionSnapshot.carbs)}C Â·{' '}
                         {Math.round(ing.nutritionSnapshot.fat)}F
                       </div>
                     </div>
@@ -950,7 +950,7 @@ export function RecipeBuilderModal({
                       </span>
                       {food.brand && (
                         <span className="truncate text-[10px] text-muted-foreground">
-                          · {food.brand}
+                          Â· {food.brand}
                         </span>
                       )}
                     </div>

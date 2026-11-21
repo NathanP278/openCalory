@@ -5,7 +5,7 @@ import type {
   MacroNutrients,
 } from '@/types/nutrition';
 import { parseHouseholdServingText } from '@/lib/nutrition/scaling';
-import { db } from '@/lib/db/macroai-db';
+import { db } from '@/lib/db/opencalory-db';
 
 export interface UsdaNutrientEntry {
   nutrientId?: number;
@@ -185,7 +185,7 @@ function extractNutrient(entry: UsdaNutrientEntry): {
 
 /**
  * Normalizes USDA FoodData Central item (both /foods/search and /food/{id} shapes)
- * into MacroAI's canonical FoodItem model with basis 'per100g'.
+ * into openCalory's canonical FoodItem model with basis 'per100g'.
  */
 export function mapUsdaFoodToFoodItem(
   raw: UsdaFoodPayload,

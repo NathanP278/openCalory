@@ -18,7 +18,7 @@ import {
   FileText,
 } from 'lucide-react';
 import { useLoggerStore, getTodayIsoDate, AiDraftItem } from '@/stores/logger-store';
-import { db, generateId } from '@/lib/db/macroai-db';
+import { db, generateId } from '@/lib/db/opencalory-db';
 import { scaleNutrition } from '@/lib/nutrition/scaling';
 import { RDA_MICRONUTRIENT_METADATA } from '@/lib/nutrition/daily-summary';
 import { compressImageToJpeg } from '@/lib/media/image-compress';
@@ -1013,7 +1013,7 @@ export function AiMealScannerSheet({
                   />
                 </div>
               ) : (
-                /* Describe Meal (Text-Only Mode — strictly no voice/microphone UI) */
+                /* Describe Meal (Text-Only Mode â€” strictly no voice/microphone UI) */
                 <div className="space-y-3">
                   <div className="space-y-1.5">
                     <label

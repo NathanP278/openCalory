@@ -3,7 +3,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { AlertCircle, Check, Scale, X } from 'lucide-react';
-import { db, generateId } from '@/lib/db/macroai-db';
+import { db, generateId } from '@/lib/db/opencalory-db';
 import { useLoggerStore } from '@/stores/logger-store';
 import {
   EASE_EXPRESSIVE,

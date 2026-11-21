@@ -128,7 +128,7 @@ function resolveConnectionConfig(): {
 
   if (process.env.VERCEL === '1') {
     return {
-      url: 'file:/tmp/macroai.db',
+      url: 'file:/tmp/opencalory.db',
       status: {
         configured: false,
         mode: 'vercel-ephemeral',
@@ -138,11 +138,11 @@ function resolveConnectionConfig(): {
   }
 
   return {
-    url: 'file:./macroai.db',
+    url: 'file:./opencalory.db',
     status: {
       configured: true,
       mode: 'local-sqlite',
-      label: 'Local SQLite (macroai.db)',
+      label: 'Local SQLite (opencalory.db)',
     },
   };
 }

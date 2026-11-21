@@ -196,13 +196,13 @@ describe('Task 9: OpenAI-Compatible Client Helper', () => {
     process.env.AI_BASE_URL = 'https://api.openai.com/v1/';
     process.env.AI_API_KEY = 'sk-test-secret-key-12345';
     process.env.AI_MODEL = 'gpt-4o-mini';
-    process.env.AI_CUSTOM_HEADERS = '{"HTTP-Referer":"https://macroai.app"}';
+    process.env.AI_CUSTOM_HEADERS = '{"HTTP-Referer":"https://opencalory.app"}';
 
     const configured = getServerAiConfig();
     expect(configured.isConfigured).toBe(true);
     expect(configured.baseUrl).toBe('https://api.openai.com/v1/');
     expect(configured.model).toBe('gpt-4o-mini');
-    expect(configured.customHeaders['HTTP-Referer']).toBe('https://macroai.app');
+    expect(configured.customHeaders['HTTP-Referer']).toBe('https://opencalory.app');
   });
 
   it('safely handles invalid AI_CUSTOM_HEADERS JSON', () => {

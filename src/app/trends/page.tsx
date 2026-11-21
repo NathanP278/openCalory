@@ -3,7 +3,7 @@
 import React, { useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Activity, BarChart3, Plus, Scale } from 'lucide-react';
-import { db } from '@/lib/db/macroai-db';
+import { db } from '@/lib/db/opencalory-db';
 import { DEFAULT_RDA_MICROS, resolveGoalsForDate } from '@/lib/nutrition/goals';
 import { aggregateDailySummary } from '@/lib/nutrition/daily-summary';
 import {
@@ -289,7 +289,7 @@ export default function TrendsPage() {
 
           {/* Summary Telemetry Strip */}
           <StaggerItem className="md:col-span-12 grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-            {/* Weekly Calorie Bank — full-width on mobile so title never wraps */}
+            {/* Weekly Calorie Bank â€” full-width on mobile so title never wraps */}
             <div className="col-span-2 lg:col-span-1 macro-card-interactive bg-card border border-border/50 rounded-2xl p-3.5 sm:p-4 flex flex-col justify-between gap-2">
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap">
@@ -300,7 +300,7 @@ export default function TrendsPage() {
                   />
                 </div>
                 <span className="lg:hidden text-[11px] font-medium text-muted-foreground tabular-nums whitespace-nowrap">
-                  Last 7D · {analytics.rolling7dSummary.loggedDays}/7 logged
+                  Last 7D Â· {analytics.rolling7dSummary.loggedDays}/7 logged
                 </span>
               </div>
               <div className="flex items-baseline justify-between gap-2">
@@ -341,7 +341,7 @@ export default function TrendsPage() {
               </div>
             </div>
 
-            {/* Density & Protein — paired cleanly beside Daily Avg Intake on mobile */}
+            {/* Density & Protein â€” paired cleanly beside Daily Avg Intake on mobile */}
             <div className="col-span-1 macro-card-interactive bg-card border border-border/50 rounded-2xl p-3.5 sm:p-4 flex flex-col justify-between gap-1.5 min-w-0">
               <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground truncate">
                 Density &amp; Protein
@@ -349,18 +349,18 @@ export default function TrendsPage() {
               <div className="text-lg sm:text-xl font-bold tabular-nums text-foreground whitespace-nowrap">
                 {analytics.proteinPerKg !== null
                   ? `${analytics.proteinPerKg.toFixed(2)}`
-                  : '—'}{' '}
+                  : 'â€”'}{' '}
                 <span className="text-xs font-normal text-muted-foreground">g/kg</span>
               </div>
               <div className="text-[11px] text-muted-foreground tabular-nums truncate">
                 Fiber{' '}
                 {analytics.fiberPer1000Kcal !== null
                   ? `${analytics.fiberPer1000Kcal.toFixed(1)} g / 1k`
-                  : '—'}
+                  : 'â€”'}
               </div>
             </div>
 
-            {/* Macro Split % — full-width on mobile with proportional bar & spacious 3-column breakdown */}
+            {/* Macro Split % â€” full-width on mobile with proportional bar & spacious 3-column breakdown */}
             <div className="col-span-2 lg:col-span-1 macro-card-interactive bg-card border border-border/50 rounded-2xl p-3.5 sm:p-4 flex flex-col justify-between gap-2.5 min-w-0">
               <div className="flex items-center justify-between gap-2">
                 <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">

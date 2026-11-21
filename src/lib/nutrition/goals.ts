@@ -1,4 +1,4 @@
-import { db } from '@/lib/db/macroai-db';
+import { db } from '@/lib/db/opencalory-db';
 import type { DailyMacroTargets, UserGoals, WeekdayKey } from '@/types/nutrition';
 
 export const WEEKDAY_KEYS: WeekdayKey[] = [

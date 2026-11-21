@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Utensils, Check, Scale } from 'lucide-react';
-import { db } from '@/lib/db/macroai-db';
+import { db } from '@/lib/db/opencalory-db';
 import { logCustomRecipe } from '@/lib/recipes/recipe-builder';
 import { scaleNutrition } from '@/lib/nutrition/scaling';
 import { useLoggerStore } from '@/stores/logger-store';
@@ -222,11 +222,11 @@ export function RecipePortionPickerModal({
               Log {recipe.name}
             </h2>
             <p className="text-[11px] text-muted-foreground tabular-nums">
-              {recipe.basis === 'perServing' ? 'Per serving' : 'Per 100g'} ·{' '}
+              {recipe.basis === 'perServing' ? 'Per serving' : 'Per 100g'} Â·{' '}
               {recipe.cookedWeightGrams && recipe.cookedWeightGrams > 0
                 ? `${recipe.cookedWeightGrams}g cooked (${recipe.totalGrams}g raw)`
                 : `${recipe.totalGrams}g batch`}{' '}
-              · {defaultServings} serving{defaultServings > 1 ? 's' : ''}
+              Â· {defaultServings} serving{defaultServings > 1 ? 's' : ''}
             </p>
           </div>
           <button
@@ -346,7 +346,7 @@ export function RecipePortionPickerModal({
                 Custom {mode === 'servings' ? 'Servings' : 'Weight (g)'}
               </span>
               <span className="text-[11px] font-normal text-muted-foreground tabular-nums">
-                1 serving ≈ {roundedPerServingGrams}g
+                1 serving â‰ˆ {roundedPerServingGrams}g
               </span>
             </label>
             <div className="relative">

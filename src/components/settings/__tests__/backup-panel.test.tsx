@@ -4,7 +4,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { BackupPanel } from '../backup-panel';
 import * as backupModule from '@/lib/db/backup';
 import * as csvExportModule from '@/lib/db/csv-export';
-import { db } from '@/lib/db/macroai-db';
+import { db } from '@/lib/db/opencalory-db';
 
 describe('BackupPanel', () => {
   beforeEach(async () => {
@@ -123,7 +123,7 @@ describe('BackupPanel', () => {
 
     render(<BackupPanel />);
 
-    const file = new File(['{"version": 2}'], 'macroai-backup.json', {
+    const file = new File(['{"version": 2}'], 'opencalory-backup.json', {
       type: 'application/json',
     });
 

@@ -1,4 +1,4 @@
-import { db } from '@/lib/db/macroai-db';
+import { db } from '@/lib/db/opencalory-db';
 import { formatPortionUnit } from '@/lib/nutrition/scaling';
 import type {
   CustomRecipe,
@@ -357,7 +357,7 @@ export function searchCustomRecipes(
   }
 
   const tokens = trimmed
-    .replace(/['’.,()-]/g, ' ')
+    .replace(/['â€™.,()-]/g, ' ')
     .split(/\s+/)
     .filter(Boolean);
   if (tokens.length === 0) return [];

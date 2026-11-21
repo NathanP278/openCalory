@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import type { FoodItem } from '@/types/nutrition';
-import { db } from '@/lib/db/macroai-db';
+import { db } from '@/lib/db/opencalory-db';
 import { parseOffProduct } from '@/lib/foods/off-adapter';
 
 export type BarcodeLookupResult =

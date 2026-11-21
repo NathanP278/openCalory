@@ -155,7 +155,7 @@ function extractOffServingOption(
 }
 
 /**
- * Parses Open Food Facts API product payload into MacroAI's FoodItem model.
+ * Parses Open Food Facts API product payload into openCalory's FoodItem model.
  * - Returns null when product not found (status === 0) or payload/product is invalid.
  * - NEVER reads nutriments.energy (which is in kJ); strictly reads energy-kcal_* fields.
  * - Determines basis: 'per100g', 'per100ml', or 'perServing'.
@@ -403,7 +403,7 @@ export function parseOffProduct(barcode: string, payload: unknown): FoodItem | n
 }
 
 /**
- * Searches Open Food Facts crowd-sourced database via MacroAI's proxy route (/api/off/search).
+ * Searches Open Food Facts crowd-sourced database via openCalory's proxy route (/api/off/search).
  * Filters out unpopulated stubs and tags PH catalog products with region: 'PH'.
  */
 export async function searchOffFoods(

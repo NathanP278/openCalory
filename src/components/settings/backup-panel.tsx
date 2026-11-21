@@ -17,7 +17,7 @@ import {
   buildDailySummaryCsv,
   buildWeightLogsCsv,
 } from "@/lib/db/csv-export";
-import { db } from "@/lib/db/macroai-db";
+import { db } from "@/lib/db/opencalory-db";
 import { DEFAULT_RDA_MICROS } from "@/lib/nutrition/goals";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { triggerHaptic } from "@/lib/motion";
@@ -65,7 +65,7 @@ const CSV_EXPORT_OPTIONS: CsvExportOption[] = [
   {
     kind: "food-logs",
     label: "Food Logs CSV",
-    filenamePrefix: "macroai-food-logs",
+    filenamePrefix: "opencalory-food-logs",
     successMessage: "Food Logs CSV exported!",
     build: async () => {
       const logs = await db.foodLogs.toArray();
@@ -75,7 +75,7 @@ const CSV_EXPORT_OPTIONS: CsvExportOption[] = [
   {
     kind: "daily-summary",
     label: "Daily Summary CSV",
-    filenamePrefix: "macroai-daily-summary",
+    filenamePrefix: "opencalory-daily-summary",
     successMessage: "Daily Summary CSV exported!",
     build: async () => {
       const [logs, goals] = await Promise.all([
@@ -88,7 +88,7 @@ const CSV_EXPORT_OPTIONS: CsvExportOption[] = [
   {
     kind: "weight-logs",
     label: "Weigh-Ins CSV",
-    filenamePrefix: "macroai-weigh-ins",
+    filenamePrefix: "opencalory-weigh-ins",
     successMessage: "Weigh-Ins CSV exported!",
     build: async () => {
       const weights = await db.weightLogs.toArray();
@@ -153,7 +153,7 @@ export function BackupPanel({ className }: BackupPanelProps) {
       const timestamp = new Date().toISOString().slice(0, 10);
       downloadTextFile(
         json,
-        `macroai-backup-${timestamp}.json`,
+        `opencalory-backup-${timestamp}.json`,
         "application/json"
       );
 
@@ -335,7 +335,7 @@ export function BackupPanel({ className }: BackupPanelProps) {
           <div className="space-y-0.5">
             <div className="text-xs font-semibold text-foreground">Import Backup</div>
             <div className="text-[11px] text-muted-foreground">
-              Restore data from a valid <code className="font-mono text-[10px]">macroai-backup.json</code> file
+              Restore data from a valid <code className="font-mono text-[10px]">opencalory-backup.json</code> file
             </div>
           </div>
 

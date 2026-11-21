@@ -106,7 +106,7 @@ function scoreSrFood(item: any): number {
 }
 
 export async function buildStaples(): Promise<void> {
-  const tmpDir = path.join(os.tmpdir(), 'macroai-usda');
+  const tmpDir = path.join(os.tmpdir(), 'opencalory-usda');
   if (!fs.existsSync(tmpDir)) {
     fs.mkdirSync(tmpDir, { recursive: true });
   }

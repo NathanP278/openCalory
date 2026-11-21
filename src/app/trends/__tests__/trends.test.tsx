@@ -1,7 +1,7 @@
 import React from 'react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
-import { db } from '@/lib/db/macroai-db';
+import { db } from '@/lib/db/opencalory-db';
 import { DEFAULT_RDA_MICROS } from '@/lib/nutrition/goals';
 import { toLocalIsoDate } from '@/lib/nutrition/adaptive-tdee';
 import { useLoggerStore } from '@/stores/logger-store';

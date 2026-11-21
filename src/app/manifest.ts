@@ -2,8 +2,8 @@ import type { MetadataRoute } from 'next';
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: 'MacroAI',
-    short_name: 'MacroAI',
+    name: 'openCalory',
+    short_name: 'openCalory',
     description: 'Offline-first, adherence-neutral calorie & macro tracking PWA',
     start_url: '/',
     display: 'standalone',

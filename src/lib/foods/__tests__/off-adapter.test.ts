@@ -6,7 +6,7 @@ import { lookupBarcodeWaterfall, useBarcodeLookup, type BarcodeLookupResult } fr
 import { GET as offRouteHandler } from '@/app/api/off/[barcode]/route';
 import { GET as offSearchRouteHandler } from '@/app/api/off/search/route';
 import { NextRequest } from 'next/server';
-import { db } from '@/lib/db/macroai-db';
+import { db } from '@/lib/db/opencalory-db';
 
 describe('Open Food Facts Adapter & Barcode Waterfall', () => {
   beforeEach(async () => {
@@ -199,7 +199,7 @@ describe('Open Food Facts Adapter & Barcode Waterfall', () => {
   });
 
   describe('lookupBarcodeWaterfall', () => {
-    test('checks MacroAIDB.foodsCache before calling /api/off', async () => {
+    test('checks openCaloryDB.foodsCache before calling /api/off', async () => {
       await db.foodsCache.put({
         id: 'custom:1',
         barcode: '888',
@@ -367,7 +367,7 @@ describe('Open Food Facts Adapter & Barcode Waterfall', () => {
         expect(urlStr).toMatch(
           /^https:\/\/world\.openfoodfacts\.org\/api\/v2\/product\/737628064502\.json\?fields=/
         );
-        expect(new Headers(init?.headers).get('User-Agent')).toBe('MacroAI/1.0');
+        expect(new Headers(init?.headers).get('User-Agent')).toBe('openCalory/1.0');
 
         return new Response(
           JSON.stringify({

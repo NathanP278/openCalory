@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { BootSplashOverlay, type BootOverlayMode } from "./boot-splash-overlay";
 import { useLoggerStore } from "@/stores/logger-store";
-import { db } from "@/lib/db/macroai-db";
+import { db } from "@/lib/db/opencalory-db";
 import { isCloudSyncEnabled, syncWithCentralDb } from "@/lib/db/cloud-sync";
 
 type BootPhase = "checking" | "locked" | "confirmed" | "revealing" | "ready";
@@ -97,7 +97,7 @@ export function AppBootGate({ children, forceGate = false }: AppBootGateProps) {
       if (typeof navigator !== "undefined" && navigator.onLine === false) {
         await waitMinHold();
         if (!isMountedRef.current) return;
-        revealApp("Offline · Local Mode");
+        revealApp("Offline Â· Local Mode");
         return;
       }
 
@@ -139,7 +139,7 @@ export function AppBootGate({ children, forceGate = false }: AppBootGateProps) {
         await waitMinHold();
         if (!isMountedRef.current) return;
         // Network unreachable / timeout -> offline-first local mode
-        revealApp("Offline · Local Mode");
+        revealApp("Offline Â· Local Mode");
       }
     }
 

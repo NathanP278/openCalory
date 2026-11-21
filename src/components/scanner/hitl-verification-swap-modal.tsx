@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Search, X, Check, Plus, Loader2 } from 'lucide-react';
-import { db, generateId } from '@/lib/db/macroai-db';
+import { db, generateId } from '@/lib/db/opencalory-db';
 import { loadStaples, searchStaples } from '@/lib/foods/staples-search';
 import { searchUsdaFoods } from '@/lib/foods/usda-adapter';
 import type { FoodItem, MacroNutrients, Micronutrients } from '@/types/nutrition';

@@ -3,7 +3,7 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db, generateId } from '@/lib/db/macroai-db';
+import { db, generateId } from '@/lib/db/opencalory-db';
 import { useLoggerStore } from '@/stores/logger-store';
 import {
   copyLogsFromDate,
@@ -648,7 +648,7 @@ export function MealSlotsView() {
                       </div>
                       <div className="text-xs text-muted-foreground tabular-nums mt-0.5 truncate">
                         {formatEntryAmount(entry.amount)} {entry.unit}
-                        {entryTime ? ` · ${entryTime}` : ''}
+                        {entryTime ? ` Â· ${entryTime}` : ''}
                       </div>
                     </button>
 
@@ -664,11 +664,11 @@ export function MealSlotsView() {
                           <span className="text-[var(--macro-protein)]">
                             {Math.round(entry.nutritionSnapshot?.protein || 0)}P
                           </span>{' '}
-                          ·{' '}
+                          Â·{' '}
                           <span className="text-[var(--macro-carbs)]">
                             {Math.round(entry.nutritionSnapshot?.carbs || 0)}C
                           </span>{' '}
-                          ·{' '}
+                          Â·{' '}
                           <span className="text-[var(--macro-fat)]">
                             {Math.round(entry.nutritionSnapshot?.fat || 0)}F
                           </span>
@@ -846,7 +846,7 @@ export function MealSlotsView() {
           >
             <div className="flex items-center justify-between gap-2 text-xs">
               <span className="font-semibold text-foreground tabular-nums">
-                {activeSelectedEntries.length} selected ·{' '}
+                {activeSelectedEntries.length} selected Â·{' '}
                 <span className="text-[var(--macro-calories)]">
                   {Math.round(selectedTotalCalories).toLocaleString()} kcal
                 </span>

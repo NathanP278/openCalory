@@ -1,7 +1,7 @@
 export type TransitionDirection = "forward" | "backward" | null;
 
 /**
- * Unified high-energy spring & easing physics for MacroAI ("The Calibration Cockpit").
+ * Unified high-energy spring & easing physics for openCalory ("The Calibration Cockpit").
  * Crisp acceleration, subtle physical settle, and unmistakable responsiveness.
  */
 export const SPRING_EXPRESSIVE = {

@@ -2,7 +2,7 @@ import 'fake-indexeddb/auto';
 import React from 'react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor, within, act } from '@testing-library/react';
-import { db } from '@/lib/db/macroai-db';
+import { db } from '@/lib/db/opencalory-db';
 import { setStaplesCache } from '@/lib/foods/staples-search';
 import {
   foodLogEntriesToRecipeIngredients,

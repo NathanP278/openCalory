@@ -1,7 +1,7 @@
 import 'fake-indexeddb/auto';
 import { describe, test, expect, beforeEach, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
-import { db } from '@/lib/db/macroai-db';
+import { db } from '@/lib/db/opencalory-db';
 import { useLoggerStore } from '@/stores/logger-store';
 import { FoodSearchDrawer, clearOnlineSearchCache } from '../food-search-drawer';
 import { setStaplesCache } from '@/lib/foods/staples-search';
@@ -647,7 +647,7 @@ describe('FoodSearchDrawer component', () => {
     fireEvent.change(screen.getByLabelText(/portion amount/i), { target: { value: '150' } });
     fireEvent.click(screen.getByRole('button', { name: /stage & add another/i }));
 
-    // Returns to search list and shows sticky multi-add tray with 1 item · 180 kcal
+    // Returns to search list and shows sticky multi-add tray with 1 item Â· 180 kcal
     await waitFor(() => {
       expect(screen.getByTestId('multi-add-tray')).toBeInTheDocument();
     });

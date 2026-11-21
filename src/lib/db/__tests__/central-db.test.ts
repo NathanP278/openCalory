@@ -2,7 +2,7 @@ import React from 'react';
 import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { db } from '../macroai-db';
+import { db } from '../opencalory-db';
 import {
   PENDING_REPLACE_SYNC_KEY,
   SyncAuthError,
@@ -286,7 +286,7 @@ describe('Central Database (Turso / libSQL) & Hybrid Dexie Sync', () => {
 
       // Initial startup sync marks browser migrated
       await syncWithCentralDb(db);
-      expect(localStorage.getItem('macroai_central_migrated_v1')).toBe('1');
+      expect(localStorage.getItem('opencalory_central_migrated_v1')).toBe('1');
 
       // Local write replicates automatically via DBCore middleware
       await db.foodLogs.put(makeLog('sync-log-1', 'Whey Protein'));
@@ -678,7 +678,7 @@ describe('Central Database (Turso / libSQL) & Hybrid Dexie Sync', () => {
       );
       expect(goodPassRes.status).toBe(200);
       const setCookie = goodPassRes.headers.get('set-cookie') ?? '';
-      expect(setCookie).toContain('macroai_sync_session=');
+      expect(setCookie).toContain('opencalory_sync_session=');
       expect(setCookie.toLowerCase()).toContain('httponly');
       expect(setCookie.toLowerCase()).toContain('samesite=lax');
       expect(setCookie).toContain('Max-Age=2592000');
@@ -942,7 +942,7 @@ describe('Central Database (Turso / libSQL) & Hybrid Dexie Sync', () => {
         'replace'
       );
 
-      localStorage.setItem('macroai_central_migrated_v1', '1');
+      localStorage.setItem('opencalory_central_migrated_v1', '1');
       setCloudSyncEnabledForTests(true);
 
       // 1. Simulate 401 locked state during importBackupJson(..., 'replace')

@@ -10,7 +10,7 @@ import { MacroBentoGrid } from '@/components/dashboard/macro-bento-grid';
 import { MicronutrientPanel } from '@/components/dashboard/micronutrient-panel';
 import HomePage from '@/app/page';
 import { useLoggerStore } from '@/stores/logger-store';
-import { db } from '@/lib/db/macroai-db';
+import { db } from '@/lib/db/opencalory-db';
 import type { FoodLogEntry, UserGoals } from '@/types/nutrition';
 
 describe('aggregateDailySummary & Adherence-Neutral Analytics', () => {
@@ -565,7 +565,7 @@ describe('aggregateDailySummary & Adherence-Neutral Analytics', () => {
 
       // Header & MacroFactor Pics 1-4 dashboard checks
       expect(screen.getByRole('heading', { name: 'Dashboard' })).toBeInTheDocument();
-      expect(screen.getByText('MacroAI')).toBeInTheDocument();
+      expect(screen.getByText('openCalory')).toBeInTheDocument();
       expect(screen.getByText('Daily Nutrition')).toBeInTheDocument();
       expect(screen.getByText('Food Logging')).toBeInTheDocument();
       expect(screen.getByText('7-Day Pace')).toBeInTheDocument();

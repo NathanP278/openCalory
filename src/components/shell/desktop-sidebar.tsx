@@ -87,11 +87,11 @@ export function DesktopSidebar({
           className="group flex items-center gap-2.5 px-2 py-1.5 rounded-2xl hover:bg-surface-sub/60 transition-colors"
         >
           <span className="w-8 h-8 rounded-full liquid-pill-primary flex items-center justify-center text-xs font-bold tracking-tight shrink-0 transition-transform duration-300 group-hover:scale-105">
-            M
+            oC
           </span>
           <div className="min-w-0">
             <div className="text-sm font-bold tracking-tight text-foreground leading-none">
-              MacroAI
+              openCalory
             </div>
             <div className="text-[11px] text-muted-foreground mt-0.5 truncate">
               Calibration Cockpit

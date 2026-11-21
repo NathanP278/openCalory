@@ -24,7 +24,7 @@ import { AiMealIdeasDrawer } from "@/components/scanner/ai-meal-ideas-drawer";
 import { WeighInDrawer } from "@/components/weight/weigh-in-drawer";
 import { useLoggerStore } from "@/stores/logger-store";
 import { ensureDefaultUserGoals } from "@/lib/nutrition/goals";
-import { db } from "@/lib/db/macroai-db";
+import { db } from "@/lib/db/opencalory-db";
 import { isCloudSyncEnabled, syncWithCentralDb } from "@/lib/db/cloud-sync";
 import { triggerHaptic } from "@/lib/motion";
 import { useFocusTrap } from "@/hooks/use-focus-trap";
