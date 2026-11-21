@@ -10,6 +10,7 @@
 
 # testing
 /coverage
+.vitest/
 
 # next.js
 /.next/
@@ -28,15 +29,9 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# local worktrees, superpowers & design scratch
-.worktrees/
-.superpowers/
-.riff/
-
 # env files
 .env*
 !.env.example
-.env.local
 
 # vercel
 .vercel
@@ -45,19 +40,31 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# local sqlite database
-macroai.db
-macroai.db-journal
+# local sqlite database & docker data
+opencalory.db
+opencalory.db-journal
+opencalory.db-wal
+opencalory.db-shm
+macroai.db*
+/data/
 
-# vitest cache
-.vitest/
-
-macroai.db-wal
-macroai.db-shm
-
-# codegraph
+# AI agents & assistant artifacts
+AGENTS.md
+CLAUDE.md
+GEMINI.md
+PRODUCT.md
+DESIGN.md
+.impeccable/
+.superpowers/
+.riff/
 .codegraph/
-
-# IDE / tool scratch
 .openidea/
-
+.worktrees/
+.claude/
+.cursor/
+.cursorrules
+.windsurf/
+.gemini/
+.antigravity/
+.aider*
+docs/superpowers/
