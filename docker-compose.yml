@@ -1,0 +1,18 @@
+services:
+  opencalory:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: opencalory
+    restart: unless-stopped
+    ports:
+      - "${PORT:-3000}:3000"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      # Persists the local SQLite database inside the mounted ./data volume.
+      # Override with a Turso libsql:// URL in .env to sync via Turso Cloud instead.
+      TURSO_DATABASE_URL: ${TURSO_DATABASE_URL:-file:/app/data/opencalory.db}
+    volumes:
+      - ./data:/app/data
