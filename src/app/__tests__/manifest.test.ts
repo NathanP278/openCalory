@@ -62,21 +62,21 @@ describe('Task 13: Manifest, Service Worker & PwaRegister', () => {
   });
 
   describe('public/sw.js Service Worker file', () => {
-    it('implements required offline caching strategies and precache list (v2 with /trends & ph-foods.json)', () => {
+    it('implements required offline caching strategies and precache list (v3 with /trends & food-catalog.db.gz)', () => {
       const swPath = path.resolve(process.cwd(), 'public/sw.js');
       expect(fs.existsSync(swPath)).toBe(true);
       const sw = fs.readFileSync(swPath, 'utf-8');
 
       // Version bump
-      expect(sw).toContain("CACHE_NAME = 'opencalory-v2'");
+      expect(sw).toContain("CACHE_NAME = 'opencalory-v3'");
 
       // Precache assets
       const precacheMatch = sw.match(/const\s+PRECACHE_ASSETS\s*=\s*\[([\s\S]*?)\]/);
       expect(precacheMatch).not.toBeNull();
       const precacheBlock = precacheMatch![1];
       expect(precacheBlock).toContain("'/trends'");
-      expect(precacheBlock).toContain("'/data/staples-2500.json'");
-      expect(precacheBlock).toContain("'/data/ph-foods.json'");
+      expect(precacheBlock).toContain("'/data/catalog-manifest.json'");
+      expect(precacheBlock).toContain("'/data/food-catalog.db.gz'");
       expect(precacheBlock).toContain("'/icons/icon-192.png'");
       expect(precacheBlock).toContain("'/icons/icon-512.png'");
       expect(precacheBlock).toContain("'/manifest.webmanifest'");
@@ -85,16 +85,16 @@ describe('Task 13: Manifest, Service Worker & PwaRegister', () => {
       expect(sw).toMatch(/skipWaiting/);
       expect(sw).toMatch(/clients\.claim/);
 
-      // Routing strategies: verify cache-first branch covers both staples-2500.json and ph-foods.json
+      // Routing strategies: verify cache-first branch covers catalog-manifest.json and food-catalog.db.gz
       const fetchBlock = sw.slice(sw.indexOf("addEventListener('fetch'"));
       expect(fetchBlock).toMatch(/\/api\//); // network-only for api
-      expect(sw).toContain('/data/staples-2500.json');
-      expect(sw).toContain('/data/ph-foods.json');
+      expect(sw).toContain('/data/catalog-manifest.json');
+      expect(sw).toContain('/data/food-catalog.db.gz');
 
-      // Execute SW fetch handler in isolation to prove cache-first serves /data/ph-foods.json
+      // Execute SW fetch handler in isolation to prove cache-first serves /data/food-catalog.db.gz
       const listeners: Record<string, (event: unknown) => void> = {};
-      const cachedPhResponse = { ok: true, status: 200, id: 'cached-ph' };
-      const cachesMatchMock = vi.fn().mockResolvedValue(cachedPhResponse);
+      const cachedCatalogResponse = { ok: true, status: 200, id: 'cached-catalog' };
+      const cachesMatchMock = vi.fn().mockResolvedValue(cachedCatalogResponse);
       const fetchMock = vi.fn();
 
       const swRunner = new Function(
@@ -121,13 +121,13 @@ describe('Task 13: Manifest, Service Worker & PwaRegister', () => {
 
       let respondedPromise: Promise<unknown> | undefined;
       listeners.fetch({
-        request: { method: 'GET', url: 'https://opencalory.test/data/ph-foods.json' },
+        request: { method: 'GET', url: 'https://opencalory.test/data/food-catalog.db.gz' },
         respondWith: (p: Promise<unknown>) => {
           respondedPromise = p;
         },
       });
       expect(respondedPromise).toBeDefined();
-      return expect(respondedPromise).resolves.toBe(cachedPhResponse).then(() => {
+      return expect(respondedPromise).resolves.toBe(cachedCatalogResponse).then(() => {
         expect(fetchMock).not.toHaveBeenCalled();
       });
     });

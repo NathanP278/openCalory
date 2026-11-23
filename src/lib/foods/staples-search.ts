@@ -1,4 +1,5 @@
 import type { FoodItem, Micronutrients } from '@/types/nutrition';
+import { searchClientCatalog } from '@/lib/foods/client-catalog';
 
 let cachedStaples: FoodItem[] | null = null;
 
@@ -698,66 +699,13 @@ export function filterStaples(
 }
 
 /**
- * Loads the static staples dataset from /data/staples-2500.json
- * (or from filesystem in Node.js test environment) and caches it in memory.
+ * Returns the in-memory staples cache when seeded (e.g. in tests or legacy callers).
+ * Static staples JSON files have been retired in favor of the SQLite FTS5 catalog.
  */
 export async function loadStaples(): Promise<FoodItem[]> {
   if (cachedStaples && cachedStaples.length > 0) {
     return cachedStaples;
   }
-
-  // Attempt fetch if running in a real browser environment
-  if (
-    typeof window !== 'undefined' &&
-    typeof window.location?.origin === 'string' &&
-    window.location.origin.startsWith('http')
-  ) {
-    try {
-      const [baseRes, phRes] = await Promise.all([
-        fetch('/data/staples-2500.json'),
-        fetch('/data/ph-foods.json').catch(() => null),
-      ]);
-      const baseData = baseRes.ok ? await baseRes.json() : null;
-      const phData = phRes && phRes.ok ? await phRes.json() : null;
-      const baseItems = Array.isArray(baseData) ? baseData : [];
-      const phItems = Array.isArray(phData) ? phData : [];
-      const merged = hydrateStapleList([...baseItems, ...phItems]);
-      if (merged.length > 0) {
-        cachedStaples = merged;
-        return cachedStaples;
-      }
-    } catch {
-      // Fallback to filesystem read below (e.g. In jsdom / test environment)
-    }
-  }
-
-  // Node.js / test environment
-  if (typeof window === 'undefined' || (typeof process !== 'undefined' && process.env.NODE_ENV === 'test')) {
-    try {
-      const fs = await import('fs/promises');
-      const path = await import('path');
-      const readJsonArray = async (fileName: 'staples-2500.json' | 'ph-foods.json'): Promise<FoodItem[]> => {
-        try {
-          const filePath = path.join(process.cwd(), 'public', 'data', fileName);
-          const content = await fs.readFile(filePath, 'utf8');
-          const parsed = JSON.parse(content);
-          return Array.isArray(parsed) ? parsed : [];
-        } catch {
-          return [];
-        }
-      };
-      const [baseItems, phItems] = await Promise.all([
-        readJsonArray('staples-2500.json'),
-        readJsonArray('ph-foods.json'),
-      ]);
-      cachedStaples = hydrateStapleList([...baseItems, ...phItems]);
-      return cachedStaples;
-    } catch (err) {
-      console.warn('Could not read staples file:', err);
-      return [];
-    }
-  }
-
   return [];
 }
 
@@ -765,15 +713,30 @@ export async function loadStaples(): Promise<FoodItem[]> {
  * Allows pre-seeding or clearing memory cache (especially useful for tests).
  */
 export function setStaplesCache(staples: FoodItem[] | null): void {
-  cachedStaples = staples;
+  cachedStaples = staples ? hydrateStapleList(staples) : null;
 }
 
 /**
- * Searches offline staples dataset with query string and optional limit.
+ * Searches offline staples cache if seeded, otherwise delegates to the unified
+ * SQLite FTS5 client catalog (`searchClientCatalog`).
  */
 export async function searchStaples(query: string, limit: number = 25): Promise<FoodItem[]> {
   const staples = await loadStaples();
-  return filterStaples(staples, query, limit);
+  if (staples.length > 0) {
+    return filterStaples(staples, query, limit);
+  }
+
+  const trimmed = query.trim();
+  if (!trimmed) {
+    return [];
+  }
+
+  try {
+    const { items } = await searchClientCatalog(trimmed, { limit });
+    return hydrateStapleList(items);
+  } catch {
+    return [];
+  }
 }
 
 function hasAllTrackedMicros(micros?: Micronutrients): boolean {

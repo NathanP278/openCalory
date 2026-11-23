@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import type { FoodItem, Micronutrients, MacroNutrients } from '@/types/nutrition';
+import type { Micronutrients, MacroNutrients } from '@/types/nutrition';
 import type { UsdaFoodPayload, UsdaNutrientEntry } from '@/lib/foods/usda-adapter';
 import type { CatalogFoodInput } from '@/lib/foods/catalog-schema';
 import { cleanFoodDisplayName, generateFoodAliases } from '@/lib/foods/name-normalizer';
@@ -265,55 +265,6 @@ function findJsonFileInDir(dir: string, pattern: RegExp): string | null {
   return null;
 }
 
-function loadStaplesFallback(projectRoot: string): CatalogFoodInput[] {
-  const staplesPath = path.join(projectRoot, 'public', 'data', 'staples-2500.json');
-  if (!fs.existsSync(staplesPath)) {
-    console.warn(`[usda] Offline fallback not found at ${staplesPath}`);
-    return [];
-  }
-
-  const rawItems = JSON.parse(fs.readFileSync(staplesPath, 'utf8')) as FoodItem[];
-  const results: CatalogFoodInput[] = [];
-
-  for (const item of rawItems) {
-    if (!passesMacroQualityGate(item.nutrientsPerBasis, 1)) continue;
-    const cleanName = cleanFoodDisplayName(item.name, item.brand);
-    if (!cleanName) continue;
-
-    const aliases = generateFoodAliases(item.name, cleanName, item.aliases);
-    const servingOptions = enrichServingOptions({
-      name: cleanName,
-      category: item.category,
-      basis: item.basis,
-      existingOptions: item.servingOptions,
-      servingWeightGrams: item.servingWeightGrams,
-    });
-
-    const fdcSuffix = item.id.replace(/^(staple|usda):/, '');
-    const canonicalId = `usda:${fdcSuffix}`;
-    const legacyIds = [`staple:${fdcSuffix}`, `usda:${fdcSuffix}`];
-
-    const record: CatalogFoodInput = {
-      ...item,
-      id: canonicalId,
-      source: 'usda',
-      sourceProvider: 'usda_sr_legacy',
-      accuracyTier: 1,
-      region: item.region || 'US',
-      name: cleanName,
-      ...(aliases.length > 0 ? { aliases } : {}),
-      servingOptions,
-      updatedAt: FIXED_TIMESTAMP,
-      legacyIds,
-    };
-    record.searchRank = computeSearchRank(record);
-    results.push(record);
-  }
-
-  console.log(`[usda] Loaded ${results.length} foods from offline fallback staples-2500.json`);
-  return results;
-}
-
 async function loadUsdaZipDataset(
   url: string,
   zipName: string,
@@ -367,7 +318,6 @@ export const usdaAdapter: CatalogAdapter = {
   async load(options: AdapterLoadOptions): Promise<CatalogFoodInput[]> {
     const usdaCacheDir = path.join(options.cacheDir, 'usda');
     const legacyCacheDir = path.join(os.tmpdir(), 'opencalory-usda');
-    const projectRoot = options.projectRoot ?? process.cwd();
 
     const foundation = await loadUsdaZipDataset(
       FOUNDATION_ZIP_URL,
@@ -402,14 +352,6 @@ export const usdaAdapter: CatalogAdapter = {
       options
     );
 
-    const combined = [...foundation, ...srLegacy, ...fndds];
-
-    // If neither Foundation nor SR Legacy could be downloaded/cached, fall back to staples-2500.json
-    if (foundation.length === 0 && srLegacy.length === 0) {
-      const fallback = loadStaplesFallback(projectRoot);
-      return [...fallback, ...fndds];
-    }
-
-    return combined;
+    return [...foundation, ...srLegacy, ...fndds];
   },
 };

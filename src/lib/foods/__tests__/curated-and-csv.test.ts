@@ -6,11 +6,9 @@ import { parseFoodCsv, parseFoodJson } from '@/lib/foods/csv-food-parser';
 import type { FoodItem } from '@/types/nutrition';
 
 const CURATED_DIR = path.resolve(process.cwd(), 'data/curated');
-const LEGACY_PH_FILE = path.resolve(process.cwd(), 'public/data/ph-foods.json');
 
 describe('curated food packs in data/curated/', () => {
-  it('contains at least the 4 required curated pack files and keeps legacy ph-foods.json intact', () => {
-    expect(fs.existsSync(LEGACY_PH_FILE)).toBe(true);
+  it('contains at least the 4 required curated pack files', () => {
     expect(fs.existsSync(CURATED_DIR)).toBe(true);
 
     const files = fs
@@ -25,15 +23,13 @@ describe('curated food packs in data/curated/', () => {
     expect(files).toContain('restaurant-chains.json');
   });
 
-  it('preserves all existing IDs from public/data/ph-foods.json in data/curated/ph-foods.json', () => {
-    const legacy: FoodItem[] = JSON.parse(fs.readFileSync(LEGACY_PH_FILE, 'utf8'));
+  it('includes core Philippine staples and chains in data/curated/ph-foods.json', () => {
     const curatedPh: FoodItem[] = JSON.parse(
       fs.readFileSync(path.join(CURATED_DIR, 'ph-foods.json'), 'utf8')
     );
-    const curatedIds = new Set(curatedPh.map((item) => item.id));
-    for (const item of legacy) {
-      expect(curatedIds.has(item.id)).toBe(true);
-    }
+    expect(curatedPh.some((item) => item.brand === 'Jollibee')).toBe(true);
+    expect(curatedPh.some((item) => item.name.toLowerCase().includes('pandesal'))).toBe(true);
+    expect(curatedPh.some((item) => item.name === 'Egg McMuffin' && item.brand === "McDonald's")).toBe(true);
   });
 
   it('validates every item across all curated packs for schema, unique IDs, servingOptions, region, accuracyTier, and Atwater sanity', () => {

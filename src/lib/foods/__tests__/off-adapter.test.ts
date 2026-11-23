@@ -243,7 +243,7 @@ describe('Open Food Facts Adapter & Barcode Waterfall', () => {
       expect(fetchSpy).not.toHaveBeenCalled();
     });
 
-    test('fetches /api/off on cache miss, caches item, and returns hit', async () => {
+    test('fetches /api/foods/barcode on cache miss, caches item, and returns hit', async () => {
       const mockOffData = {
         status: 1,
         product: {
@@ -273,7 +273,7 @@ describe('Open Food Facts Adapter & Barcode Waterfall', () => {
         expect(res.item.brand).toBe('Chobani');
         expect(res.item.nutrientsPerBasis.calories).toBe(97);
       }
-      expect(fetchSpy).toHaveBeenCalledWith('/api/off/001234567890');
+      expect(fetchSpy).toHaveBeenCalledWith('/api/foods/barcode/001234567890');
 
       // Verify it was cached in Dexie
       const cached = await db.foodsCache.where('barcode').equals('001234567890').first();

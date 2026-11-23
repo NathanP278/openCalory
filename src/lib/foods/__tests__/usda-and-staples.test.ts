@@ -1,4 +1,6 @@
 import 'fake-indexeddb/auto';
+import fs from 'node:fs';
+import path from 'node:path';
 import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mapUsdaFoodToFoodItem, fetchAndCacheUsdaFood } from '../usda-adapter';
 import { filterStaples, searchStaples, loadStaples, setStaplesCache, enrichMealItemsWithStaples, estimateMissingStapleMicros } from '../staples-search';
@@ -7,6 +9,36 @@ import { GET as usdaRouteHandler } from '@/app/api/usda/[...path]/route';
 import { NextRequest } from 'next/server';
 import { db } from '@/lib/db/opencalory-db';
 import type { FoodItem, Micronutrients } from '@/types/nutrition';
+
+function loadCuratedPhFixtures(): FoodItem[] {
+  const curatedPhPath = path.resolve(process.cwd(), 'data', 'curated', 'ph-foods.json');
+  return JSON.parse(fs.readFileSync(curatedPhPath, 'utf8')) as FoodItem[];
+}
+
+const SAMPLE_USDA_STAPLES: FoodItem[] = [
+  {
+    id: 'staple:171077',
+    source: 'staple',
+    name: 'Chicken breast, raw',
+    basis: 'per100g',
+    servingSize: 100,
+    servingUnit: 'g',
+    nutrientsPerBasis: { calories: 120, protein: 22.5, carbs: 0, fat: 2.6, fiber: 0 },
+    micronutrientsPerBasis: { sodiumMg: 45, potassiumMg: 334 },
+    updatedAt: 1700000000000,
+  },
+  {
+    id: 'staple:171705',
+    source: 'staple',
+    name: 'Avocado, raw',
+    basis: 'per100g',
+    servingSize: 100,
+    servingUnit: 'g',
+    nutrientsPerBasis: { calories: 160, protein: 2, carbs: 8.5, fat: 14.7, fiber: 6.7 },
+    micronutrientsPerBasis: { potassiumMg: 485 },
+    updatedAt: 1700000000000,
+  },
+];
 
 describe('USDA adapter and Staples search', () => {
   beforeEach(async () => {
@@ -132,16 +164,24 @@ describe('USDA adapter and Staples search', () => {
     expect(filterStaples(sample, '   ', 10)).toHaveLength(2);
   });
 
-  test('loadStaples and searchStaples loads ~2500 staples from public/data/staples-2500.json', async () => {
+  test('loadStaples returns empty when unseeded and searchStaples searches seeded staples cache', async () => {
     setStaplesCache(null);
-    const loaded = await loadStaples();
-    expect(loaded.length).toBeGreaterThanOrEqual(2500);
-    expect(loaded[0].basis).toBe('per100g');
-    expect(loaded[0].source).toBe('staple');
+    const unseeded = await loadStaples();
+    expect(unseeded).toEqual([]);
 
-    const searchHits = await searchStaples('chicken', 5);
-    expect(searchHits.length).toBeGreaterThan(0);
-    expect(searchHits[0].name.toLowerCase()).toContain('chicken');
+    setStaplesCache(SAMPLE_USDA_STAPLES);
+    try {
+      const loaded = await loadStaples();
+      expect(loaded).toHaveLength(2);
+      expect(loaded[0].basis).toBe('per100g');
+      expect(loaded[0].source).toBe('staple');
+
+      const searchHits = await searchStaples('chicken', 5);
+      expect(searchHits.length).toBeGreaterThan(0);
+      expect(searchHits[0].name.toLowerCase()).toContain('chicken');
+    } finally {
+      setStaplesCache(null);
+    }
   });
 
   test('fetchAndCacheUsdaFood returns cached item without fetching if already in Dexie foodsCache', async () => {
@@ -215,9 +255,8 @@ describe('USDA adapter and Staples search', () => {
     expect(fetchSpy).toHaveBeenCalled();
   });
 
-  test('loadStaples merges PH foods and filterStaples ranks brand + PH matches', async () => {
-    setStaplesCache(null);
-    const loaded = await loadStaples();
+  test('filterStaples ranks brand + curated PH food matches', async () => {
+    const loaded = [...SAMPLE_USDA_STAPLES, ...loadCuratedPhFixtures()];
 
     expect(loaded.some((f) => f.name === 'Egg McMuffin' && f.brand === "McDonald's")).toBe(true);
     expect(loaded.some((f) => f.name.includes('Chickenjoy') && f.brand === 'Jollibee')).toBe(true);
@@ -271,8 +310,7 @@ describe('USDA adapter and Staples search', () => {
   });
 
   test('filterStaples suggests close matches for typos and missing spaces', async () => {
-    setStaplesCache(null);
-    const loaded = await loadStaples();
+    const loaded = [...SAMPLE_USDA_STAPLES, ...loadCuratedPhFixtures()];
 
     const chikenHits = filterStaples(loaded, 'chiken', 10);
     expect(chikenHits.some((f) => f.name.toLowerCase().includes('chicken'))).toBe(true);
@@ -419,21 +457,25 @@ describe('USDA adapter and Staples search', () => {
     });
   });
 
-  test('backfills extended nutrients on loaded staples and enriches meal items with extended nutrients', async () => {
-    setStaplesCache(null);
-    const loaded = await loadStaples();
-    const eggMcMuffin = loaded.find((f) => f.name === 'Egg McMuffin');
-    expect(eggMcMuffin).toBeDefined();
-    expect(typeof eggMcMuffin?.micronutrientsPerBasis.saturatedFatG).toBe('number');
-    expect(typeof eggMcMuffin?.micronutrientsPerBasis.cholesterolMg).toBe('number');
-    expect((eggMcMuffin?.micronutrientsPerBasis.cholesterolMg ?? 0)).toBeGreaterThan(0);
+  test('backfills extended nutrients on seeded staples and enriches meal items with extended nutrients', async () => {
+    setStaplesCache(loadCuratedPhFixtures());
+    try {
+      const loaded = await loadStaples();
+      const eggMcMuffin = loaded.find((f) => f.name === 'Egg McMuffin');
+      expect(eggMcMuffin).toBeDefined();
+      expect(typeof eggMcMuffin?.micronutrientsPerBasis.saturatedFatG).toBe('number');
+      expect(typeof eggMcMuffin?.micronutrientsPerBasis.cholesterolMg).toBe('number');
+      expect((eggMcMuffin?.micronutrientsPerBasis.cholesterolMg ?? 0)).toBeGreaterThan(0);
 
-    const enriched = await enrichMealItemsWithStaples<
-      { name: string; microsPer100g?: Micronutrients }
-    >([{ name: 'Egg McMuffin' }]);
-    expect(typeof enriched[0].microsPer100g?.saturatedFatG).toBe('number');
-    expect(typeof enriched[0].microsPer100g?.cholesterolMg).toBe('number');
-    expect(typeof enriched[0].microsPer100g?.sugarG).toBe('number');
+      const enriched = await enrichMealItemsWithStaples<
+        { name: string; microsPer100g?: Micronutrients }
+      >([{ name: 'Egg McMuffin' }]);
+      expect(typeof enriched[0].microsPer100g?.saturatedFatG).toBe('number');
+      expect(typeof enriched[0].microsPer100g?.cholesterolMg).toBe('number');
+      expect(typeof enriched[0].microsPer100g?.sugarG).toBe('number');
+    } finally {
+      setStaplesCache(null);
+    }
   });
 
   test('enrichMealItemsWithStaples normalizes perServing PH staple micros to per100g without double-scaling and skips weightless perServing items', async () => {

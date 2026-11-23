@@ -1,5 +1,5 @@
 // openCalory Vanilla PWA Service Worker (Zero-dependency, Next.js 16 Turbopack compatible)
-const CACHE_NAME = 'opencalory-v2';
+const CACHE_NAME = 'opencalory-v3';
 
 const PRECACHE_ASSETS = [
   '/',
@@ -10,13 +10,13 @@ const PRECACHE_ASSETS = [
   '/manifest.webmanifest',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
-  '/data/staples-2500.json',
-  '/data/ph-foods.json',
+  '/data/catalog-manifest.json',
+  '/data/food-catalog.db.gz',
 ];
 
 const CACHE_FIRST_DATA_PATHS = new Set([
-  '/data/staples-2500.json',
-  '/data/ph-foods.json',
+  '/data/catalog-manifest.json',
+  '/data/food-catalog.db.gz',
 ]);
 
 // Install: precache app shell and static staples dataset, immediately activate
@@ -67,7 +67,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 2. Offline food datasets (/data/staples-2500.json & /data/ph-foods.json): Cache-first
+  // 2. Offline food catalog (/data/catalog-manifest.json & /data/food-catalog.db.gz): Cache-first
   if (CACHE_FIRST_DATA_PATHS.has(url.pathname)) {
     event.respondWith(
       caches.match(event.request).then((cachedResponse) => {
