@@ -8,6 +8,7 @@ import { BackupPanel } from "@/components/settings/backup-panel";
 import { GoalsCalculatorForm } from "@/components/settings/goals-calculator-form";
 import { AiHealthStatusCard } from "@/components/settings/ai-health-status-card";
 import { CentralDbStatusCard } from "@/components/settings/central-db-status-card";
+import { FoodCatalogCard } from "@/components/settings/food-catalog-card";
 import { AppleHealthShortcutCard } from "@/components/settings/apple-health-shortcut-card";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import {
@@ -165,6 +166,15 @@ export default function SettingsPage() {
               }`}
             >
               <AppleHealthShortcutCard />
+            </div>
+
+            {/* Food Database Catalog, Importer & ODbL Attribution */}
+            <div
+              className={`md:col-span-2 lg:col-span-1 ${
+                activeTab === "data" ? "block" : "hidden lg:block"
+              }`}
+            >
+              <FoodCatalogCard />
             </div>
 
             {/* Data Backup & Restore */}
