@@ -69,6 +69,7 @@ export interface SyncCatalogOptions {
     reader: ReadableStreamDefaultReader<Uint8Array>,
     onBytesRead: (bytes: number) => void
   ) => Promise<void>;
+  verifyDb?: (manifest: CatalogManifest) => Promise<void> | void;
   onProgress?: (pct: number) => void;
 }
 
@@ -226,6 +227,19 @@ export async function syncCatalogToOpfs(options: SyncCatalogOptions): Promise<Sy
     }
   } finally {
     reader.releaseLock();
+  }
+
+  // Verify the imported DB BEFORE persisting catalog-manifest.json so a corrupt
+  // or schema-invalid download never poisons the manifest and prevents retries.
+  if (options.verifyDb) {
+    try {
+      await options.verifyDb(remoteManifest);
+    } catch (err) {
+      if (!options.importDbStream) {
+        await options.opfsRoot.removeEntry(DEFAULT_DB_FILENAME).catch(() => undefined);
+      }
+      throw err;
+    }
   }
 
   await writeStoredManifest(options.opfsRoot, remoteManifest);
@@ -443,19 +457,20 @@ if (isDedicatedWorker) {
       if (typeof navigator.storage.estimate === 'function') {
         try {
           const estimate = await navigator.storage.estimate();
-          const quota = estimate.quota ?? 0;
-          const usage = estimate.usage ?? 0;
-          const available = Math.max(0, quota - usage);
-          const required = manifest.rawBytes * 2;
-          if (quota > 0 && available < required) {
-            emitStatus({
-              status: 'fallback',
-              tier: manifest.tier,
-              foodCount: manifest.foodCount,
-              version: manifest.version,
-              reason: `Insufficient OPFS storage quota (${available} bytes free, need ${required} bytes).`,
-            });
-            return;
+          if (typeof estimate.quota === 'number') {
+            const usage = typeof estimate.usage === 'number' ? estimate.usage : 0;
+            const available = Math.max(0, estimate.quota - usage);
+            const required = manifest.rawBytes * 2;
+            if (available < required) {
+              emitStatus({
+                status: 'fallback',
+                tier: manifest.tier,
+                foodCount: manifest.foodCount,
+                version: manifest.version,
+                reason: `Insufficient OPFS storage quota (${available} bytes free, need ${required} bytes).`,
+              });
+              return;
+            }
           }
         } catch {
           // If estimate() fails in a restricted context, proceed cautiously or fall back on write error
@@ -484,6 +499,29 @@ if (isDedicatedWorker) {
       }
 
       const currentPool = poolUtil;
+      let verifiedDb: Database | null = null;
+      let verifiedDbName: string | null = null;
+
+      const openAndVerifySahDb = (dbName: string): Database => {
+        const candidate = new currentPool.OpfsSAHPoolDb(dbName);
+        try {
+          candidate.exec('PRAGMA query_only = ON');
+          candidate.selectObjects('SELECT 1 AS ok FROM foods LIMIT 1');
+          return candidate;
+        } catch (err) {
+          try {
+            candidate.close();
+          } catch {
+            // Ignore close errors
+          }
+          try {
+            currentPool.unlink(dbName);
+          } catch {
+            // Ignore unlink errors
+          }
+          throw err;
+        }
+      };
 
       const syncResult = await syncCatalogToOpfs({
         opfsRoot,
@@ -501,6 +539,11 @@ if (isDedicatedWorker) {
             return value;
           });
         },
+        verifyDb: (m) => {
+          const targetName = getSahPoolDbName(m.sha256);
+          verifiedDb = openAndVerifySahDb(targetName);
+          verifiedDbName = targetName;
+        },
         onProgress: (pct) => {
           emitStatus({
             status: 'syncing',
@@ -512,11 +555,19 @@ if (isDedicatedWorker) {
         },
       });
 
-      const nextDbName = getSahPoolDbName(syncResult.manifest.sha256);
-      const nextDb = new currentPool.OpfsSAHPoolDb(nextDbName);
-      // Verify the newly synced database is readable before swapping
-      nextDb.exec('PRAGMA query_only = ON');
-      nextDb.selectObjects('SELECT 1 AS ok FROM foods LIMIT 1');
+      const nextDbName = verifiedDbName ?? getSahPoolDbName(syncResult.manifest.sha256);
+      let nextDb: Database;
+      if (verifiedDb) {
+        nextDb = verifiedDb;
+      } else {
+        try {
+          nextDb = openAndVerifySahDb(nextDbName);
+        } catch (err) {
+          // Cached DB was corrupt; remove stale manifest so next reload re-downloads cleanly
+          await opfsRoot.removeEntry(MANIFEST_FILENAME).catch(() => undefined);
+          throw err;
+        }
+      }
 
       const prevDb = activeDb;
       const prevName = activeDbFilename;

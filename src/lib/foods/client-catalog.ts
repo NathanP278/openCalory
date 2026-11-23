@@ -75,20 +75,23 @@ export async function checkOpfsQuota(
   if (typeof resolvedStorage.estimate === 'function') {
     try {
       const estimate = await resolvedStorage.estimate();
-      const quota = typeof estimate?.quota === 'number' ? estimate.quota : 0;
-      const usage = typeof estimate?.usage === 'number' ? estimate.usage : 0;
-      const availableBytes = Math.max(0, quota - usage);
+      if (typeof estimate?.quota === 'number') {
+        const usage = typeof estimate?.usage === 'number' ? estimate.usage : 0;
+        const availableBytes = Math.max(0, estimate.quota - usage);
 
-      if (quota > 0 && availableBytes < requiredBytes) {
-        return {
-          ok: false,
-          reason: `Insufficient OPFS storage quota (${availableBytes} bytes free, need ${requiredBytes} bytes).`,
-          availableBytes,
-          requiredBytes,
-        };
+        if (availableBytes < requiredBytes) {
+          return {
+            ok: false,
+            reason: `Insufficient OPFS storage quota (${availableBytes} bytes free, need ${requiredBytes} bytes).`,
+            availableBytes,
+            requiredBytes,
+          };
+        }
+
+        return { ok: true, availableBytes, requiredBytes };
       }
 
-      return { ok: true, availableBytes, requiredBytes };
+      return { ok: true, requiredBytes };
     } catch {
       return {
         ok: false,

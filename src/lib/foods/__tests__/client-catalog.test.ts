@@ -206,6 +206,14 @@ describe('client-catalog (OPFS/quota safety, worker bridge, cancellation, fallba
       expect(res.reason).toMatch(/quota|storage/i);
       expect(res.requiredBytes).toBe(SAMPLE_MANIFEST.rawBytes * 2);
       expect(res.availableBytes).toBe(20_000_000);
+
+      // Explicit quota === 0 (restricted private browsing) must also trigger fallback
+      const zeroQuotaRes = await checkOpfsQuota(SAMPLE_MANIFEST.rawBytes, {
+        getDirectory: vi.fn(),
+        estimate: vi.fn().mockResolvedValue({ quota: 0, usage: 0 }),
+      });
+      expect(zeroQuotaRes.ok).toBe(false);
+      expect(zeroQuotaRes.availableBytes).toBe(0);
     });
 
     it('transitions to fallback and routes searchClientCatalog to /api/foods/search when OPFS getDirectory is unavailable', async () => {
@@ -495,6 +503,74 @@ describe('client-catalog (OPFS/quota safety, worker bridge, cancellation, fallba
       expect(files.has('food-catalog.tmp.db')).toBe(false);
       const savedManifest = JSON.parse(new TextDecoder().decode(files.get('catalog-manifest.json')));
       expect(savedManifest.sha256).toBe(SAMPLE_MANIFEST.sha256);
+    });
+
+    it('does NOT persist catalog-manifest.json when post-import verifyDb fails so subsequent sync retries', async () => {
+      const { gzipSync } = await import('node:zlib');
+      const corruptDbBytes = new Uint8Array([0x53, 0x51, 0x4c, 0x69, 0x74, 0x65, 0x00]);
+      const gzipped = new Uint8Array(gzipSync(corruptDbBytes));
+      const { root, files } = createMemoryOpfsDir({
+        'catalog-manifest.json': JSON.stringify({ ...SAMPLE_MANIFEST, sha256: 'old-sha' }),
+      });
+
+      const makeFetchMock = () =>
+        vi.fn().mockImplementation(async (input: RequestInfo | URL) => {
+          const url = String(input);
+          if (url.includes('/api/foods/manifest')) {
+            return new Response(
+              JSON.stringify({ ...SAMPLE_MANIFEST, rawBytes: corruptDbBytes.byteLength }),
+              {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' },
+              }
+            );
+          }
+          if (url.includes('/api/foods/catalog')) {
+            const stream = new ReadableStream<Uint8Array>({
+              start(controller) {
+                controller.enqueue(gzipped);
+                controller.close();
+              },
+            });
+            return new Response(stream, {
+              status: 200,
+              headers: { 'Content-Type': 'application/gzip' },
+            });
+          }
+          return new Response('Not found', { status: 404 });
+        });
+
+      const fetchAttempt1 = makeFetchMock();
+      await expect(
+        syncCatalogToOpfs({
+          opfsRoot: root,
+          fetchImpl: fetchAttempt1,
+          verifyDb: () => {
+            throw new Error('SQLITE_CORRUPT: no such table: foods');
+          },
+        })
+      ).rejects.toThrow(/SQLITE_CORRUPT/);
+
+      // Manifest must STILL hold old-sha (not the failed new sha256), and bad DB cleaned up
+      const storedAfterFail = JSON.parse(
+        new TextDecoder().decode(files.get('catalog-manifest.json'))
+      );
+      expect(storedAfterFail.sha256).toBe('old-sha');
+      expect(files.has('food-catalog.db')).toBe(false);
+
+      // Subsequent sync retries downloading /api/foods/catalog instead of skipping
+      const fetchAttempt2 = makeFetchMock();
+      const retryResult = await syncCatalogToOpfs({
+        opfsRoot: root,
+        fetchImpl: fetchAttempt2,
+        verifyDb: () => undefined,
+      });
+      expect(retryResult.downloaded).toBe(true);
+      expect(fetchAttempt2).toHaveBeenCalledTimes(2);
+      const storedAfterRetry = JSON.parse(
+        new TextDecoder().decode(files.get('catalog-manifest.json'))
+      );
+      expect(storedAfterRetry.sha256).toBe(SAMPLE_MANIFEST.sha256);
     });
   });
 
