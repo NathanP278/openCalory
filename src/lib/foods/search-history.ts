@@ -61,6 +61,10 @@ function synthesizeFoodFromLog(log: FoodLogEntry): FoodItem {
     log.source === 'staple' ||
     log.source === 'usda' ||
     log.source === 'off' ||
+    log.source === 'catalog' ||
+    log.source === 'fatsecret' ||
+    log.source === 'edamam' ||
+    log.source === 'nutritionix' ||
     log.source === 'custom_barcode' ||
     log.source === 'custom_food'
       ? log.source
@@ -84,7 +88,8 @@ function resolveLogToEntry(
   foodsById: Map<string, FoodItem>,
   recipesById: Map<string, CustomRecipe>,
   foodsByName: Map<string, FoodItem>,
-  recipesByName: Map<string, CustomRecipe>
+  recipesByName: Map<string, CustomRecipe>,
+  legacyAliasMap?: Map<string, string>
 ): { key: string; entry: SearchableEntry } | null {
   if (!log || !log.name) return null;
 
@@ -111,7 +116,9 @@ function resolveLogToEntry(
     };
   }
 
+  const canonicalId = (rawFoodId && legacyAliasMap?.get(rawFoodId)) || rawFoodId;
   const resolvedFood =
+    (canonicalId ? foodsById.get(canonicalId) : undefined) ??
     (rawFoodId ? foodsById.get(rawFoodId) : undefined) ??
     foodsByName.get(log.name.trim().toLowerCase()) ??
     synthesizeFoodFromLog(log);
@@ -159,7 +166,8 @@ export function computeRecentEntries(
   logs: FoodLogEntry[],
   foodsById: Map<string, FoodItem>,
   recipesById: Map<string, CustomRecipe>,
-  limit = 25
+  limit = 25,
+  legacyAliasMap?: Map<string, string>
 ): SearchableEntry[] {
   if (!Array.isArray(logs) || logs.length === 0 || limit <= 0) {
     return [];
@@ -171,7 +179,14 @@ export function computeRecentEntries(
   const results: SearchableEntry[] = [];
 
   for (const log of sorted) {
-    const resolved = resolveLogToEntry(log, foodsById, recipesById, foodsByName, recipesByName);
+    const resolved = resolveLogToEntry(
+      log,
+      foodsById,
+      recipesById,
+      foodsByName,
+      recipesByName,
+      legacyAliasMap
+    );
     if (!resolved || seenKeys.has(resolved.key)) continue;
     seenKeys.add(resolved.key);
     results.push(resolved.entry);
@@ -197,7 +212,8 @@ export function computeFrequentEntries(
   foodsById: Map<string, FoodItem>,
   recipesById: Map<string, CustomRecipe>,
   windowDays = 60,
-  limit = 25
+  limit = 25,
+  legacyAliasMap?: Map<string, string>
 ): SearchableEntry[] {
   if (!Array.isArray(logs) || logs.length === 0 || limit <= 0) {
     return [];
@@ -238,7 +254,14 @@ export function computeFrequentEntries(
       continue;
     }
 
-    const resolved = resolveLogToEntry(log, foodsById, recipesById, foodsByName, recipesByName);
+    const resolved = resolveLogToEntry(
+      log,
+      foodsById,
+      recipesById,
+      foodsByName,
+      recipesByName,
+      legacyAliasMap
+    );
     if (!resolved) continue;
 
     const existing = groups.get(resolved.key);
@@ -270,13 +293,14 @@ export function computePinnedEntries(
   pins: PinnedFood[],
   foodsById: Map<string, FoodItem>,
   recipesById: Map<string, CustomRecipe>,
-  logs: FoodLogEntry[] = []
+  logs: FoodLogEntry[] = [],
+  legacyAliasMap?: Map<string, string>
 ): SearchableEntry[] {
   if (!Array.isArray(pins) || pins.length === 0) return [];
 
   const lastPortionByKey = new Map<string, { lastAmount: number; lastUnit: string }>();
   if (logs.length > 0) {
-    const recents = computeRecentEntries(logs, foodsById, recipesById, 200);
+    const recents = computeRecentEntries(logs, foodsById, recipesById, 200, legacyAliasMap);
     for (const r of recents) {
       const key = r.kind === 'food' ? `food:${r.food.id}` : `recipe:${r.recipe.id}`;
       if (r.lastAmount !== undefined && r.lastUnit !== undefined) {
@@ -286,6 +310,7 @@ export function computePinnedEntries(
   }
 
   const sortedPins = [...pins].sort((a, b) => (b.pinnedAt ?? 0) - (a.pinnedAt ?? 0));
+  const seenKeys = new Set<string>();
   const results: SearchableEntry[] = [];
 
   for (const pin of sortedPins) {
@@ -295,16 +320,23 @@ export function computePinnedEntries(
         : pin.refId;
       const recipe = recipesById.get(cleanId) ?? recipesById.get(pin.refId);
       if (!recipe) continue;
-      const last = lastPortionByKey.get(`recipe:${recipe.id}`);
+      const key = `recipe:${recipe.id}`;
+      if (seenKeys.has(key)) continue;
+      seenKeys.add(key);
+      const last = lastPortionByKey.get(key);
       results.push({
         kind: 'recipe',
         recipe,
         ...(last ?? {}),
       });
     } else {
-      const food = foodsById.get(pin.refId);
+      const canonicalId = legacyAliasMap?.get(pin.refId) ?? pin.refId;
+      const food = foodsById.get(canonicalId) ?? foodsById.get(pin.refId);
       if (!food) continue;
-      const last = lastPortionByKey.get(`food:${food.id}`);
+      const key = `food:${food.id}`;
+      if (seenKeys.has(key)) continue;
+      seenKeys.add(key);
+      const last = lastPortionByKey.get(key);
       results.push({
         kind: 'food',
         food,

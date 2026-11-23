@@ -27,7 +27,16 @@ import {
 } from '@/lib/nutrition/scaling';
 import { useLoggerStore } from '@/stores/logger-store';
 import { useFocusTrap } from '@/hooks/use-focus-trap';
-import { loadStaples, filterStaples } from '@/lib/foods/staples-search';
+import { filterStaples } from '@/lib/foods/staples-search';
+import {
+  initClientCatalog,
+  getCatalogSyncState,
+  subscribeCatalogSync,
+  searchClientCatalog,
+  resolveClientLegacyIds,
+  type CatalogSyncState,
+} from '@/lib/foods/client-catalog';
+import { deduplicateSearchResults } from '@/lib/foods/dedup';
 import {
   computeRecentEntries,
   computeFrequentEntries,
@@ -37,8 +46,6 @@ import {
   recipeToFoodItem,
   type SearchableEntry,
 } from '@/lib/foods/search-history';
-import { searchUsdaFoods } from '@/lib/foods/usda-adapter';
-import { searchOffFoods } from '@/lib/foods/off-adapter';
 import { FoodRowSkeleton } from '@/components/ui/skeleton';
 import { runViewTransition, triggerHaptic } from '@/lib/motion';
 import type {
@@ -50,14 +57,62 @@ import type {
 } from '@/types/nutrition';
 
 const onlineQueryCache = new Map<string, FoodItem[]>();
-const onlineItemPool = new Map<string, FoodItem>();
 
 /**
  * Clears in-memory online food query caches (intended for tests/reset).
  */
 export function clearOnlineSearchCache(): void {
   onlineQueryCache.clear();
-  onlineItemPool.clear();
+}
+
+function getFoodSourceBadge(food: FoodItem): {
+  label: 'Verified' | 'Regional' | 'Branded' | 'Custom';
+  toneClass: string;
+  showGlobe?: boolean;
+} {
+  if (food.source === 'custom_food' || food.source === 'custom_barcode') {
+    return {
+      label: 'Custom',
+      toneClass: 'bg-purple-500/15 text-purple-500',
+    };
+  }
+  if (food.accuracyTier === 1 || food.accuracyTier === 2) {
+    return {
+      label: 'Verified',
+      toneClass: 'bg-emerald-500/15 text-emerald-500',
+    };
+  }
+  if (
+    food.accuracyTier === 3 ||
+    (food.region && food.region !== 'GLOBAL' && food.source !== 'off')
+  ) {
+    return {
+      label: 'Regional',
+      toneClass: 'bg-sky-500/15 text-sky-500',
+    };
+  }
+  if (
+    food.accuracyTier === 4 ||
+    food.source === 'off' ||
+    food.source === 'fatsecret' ||
+    food.source === 'edamam' ||
+    food.source === 'nutritionix' ||
+    Boolean(food.brand)
+  ) {
+    return {
+      label: 'Branded',
+      toneClass: 'bg-[var(--macro-calories)]/15 text-[var(--macro-calories)]',
+      showGlobe:
+        food.source === 'off' ||
+        food.source === 'fatsecret' ||
+        food.source === 'edamam' ||
+        food.source === 'nutritionix',
+    };
+  }
+  return {
+    label: 'Verified',
+    toneClass: 'bg-emerald-500/15 text-emerald-500',
+  };
 }
 
 export interface FoodSearchDrawerProps {
@@ -178,21 +233,27 @@ function FoodSearchContent({ date, mealSlot, onClose }: FoodSearchContentProps) 
 
   const [query, setQuery] = useState(() => searchInitialQuery || '');
   const [activeTab, setActiveTab] = useState<HistoryTab>('recents');
-  const [staples, setStaples] = useState<FoodItem[]>([]);
+  const [catalogSyncState, setCatalogSyncState] = useState<CatalogSyncState>(() =>
+    getCatalogSyncState()
+  );
   const [cachedFoods, setCachedFoods] = useState<FoodItem[]>([]);
   const [customRecipes, setCustomRecipes] = useState<CustomRecipe[]>([]);
   const [pinnedFoods, setPinnedFoods] = useState<PinnedFood[]>([]);
   const [historyLogs, setHistoryLogs] = useState<FoodLogEntry[]>([]);
+  const [catalogResults, setCatalogResults] = useState<FoodItem[]>([]);
+  const [catalogSettledQuery, setCatalogSettledQuery] = useState<string>('');
+  const [resolvedLegacyFoods, setResolvedLegacyFoods] = useState<Map<string, FoodItem>>(
+    () => new Map()
+  );
+  const [legacyAliasMap, setLegacyAliasMap] = useState<Map<string, string>>(
+    () => new Map()
+  );
   const [onlineResults, setOnlineResults] = useState<FoodItem[]>(() => {
     const initKey = (searchInitialQuery || '').trim().toLowerCase();
     return initKey ? (onlineQueryCache.get(initKey) ?? []) : [];
   });
-  const [isOnlineLoading, setIsOnlineLoading] = useState<boolean>(() => {
-    const initKey = (searchInitialQuery || '').trim().toLowerCase();
-    return Boolean(initKey && !onlineQueryCache.has(initKey));
-  });
+  const [isOnlineLoading, setIsOnlineLoading] = useState<boolean>(false);
   const [onlineError, setOnlineError] = useState<string | null>(null);
-  const [onlineRetryNonce, setOnlineRetryNonce] = useState(0);
   const [highlightedIndex, setHighlightedIndex] = useState<number>(-1);
   const sheetRef = useRef<HTMLDivElement | null>(null);
   useFocusTrap(sheetRef, true);
@@ -209,38 +270,91 @@ function FoodSearchContent({ date, mealSlot, onClose }: FoodSearchContentProps) 
   const [stagedEntries, setStagedEntries] = useState<FoodLogEntry[]>([]);
 
   const isMountedRef = useRef(true);
-  const searchAbortRef = useRef<AbortController | null>(null);
+  const catalogAbortRef = useRef<AbortController | null>(null);
+  const onlineAbortRef = useRef<AbortController | null>(null);
   const resultsContainerRef = useRef<HTMLDivElement | null>(null);
   const savedScrollTopRef = useRef<number>(0);
 
-  // Load offline staples, Dexie foodsCache, customRecipes, pinnedFoods, and recent 60-day foodLogs on mount
+  // Initialize OPFS SQLite catalog and load Dexie foodsCache, customRecipes, pinnedFoods, and foodLogs on mount
   useEffect(() => {
     isMountedRef.current = true;
-    async function initOfflineData() {
+    initClientCatalog();
+    const unsubscribe = subscribeCatalogSync((nextState) => {
+      if (isMountedRef.current) {
+        setCatalogSyncState(nextState);
+      }
+    });
+
+    async function initLocalData() {
       try {
-        const [loadedStaples, cached, recipes, pins, logs] = await Promise.all([
-          loadStaples(),
+        const [cached, recipes, pins, logs] = await Promise.all([
           db.foodsCache.toArray(),
           db.customRecipes.toArray(),
           db.pinnedFoods.toArray(),
           db.foodLogs.toArray(),
         ]);
         if (isMountedRef.current) {
-          setStaples(loadedStaples);
           setCachedFoods(cached);
           setCustomRecipes(recipes);
           setPinnedFoods(pins);
           setHistoryLogs(logs);
         }
       } catch (err) {
-        console.error('Failed to load offline staples/cache:', err);
+        console.error('Failed to load local cache/history:', err);
       }
     }
-    initOfflineData();
+    void initLocalData();
     return () => {
       isMountedRef.current = false;
+      unsubscribe();
+      catalogAbortRef.current?.abort();
+      onlineAbortRef.current?.abort();
     };
   }, []);
+
+  // Review Focus #5: Lazily resolve legacy foodIds (staple:*, usda:*, ph:*) in foodLogs & pinnedFoods
+  useEffect(() => {
+    const candidateIds = new Set<string>();
+    for (const log of historyLogs) {
+      const id = (log.foodId || '').trim();
+      if (id && log.source !== 'recipe' && !id.startsWith('recipe:')) {
+        candidateIds.add(id);
+      }
+    }
+    for (const pin of pinnedFoods) {
+      if (pin.kind === 'food' && pin.refId) {
+        candidateIds.add(pin.refId.trim());
+      }
+    }
+    if (candidateIds.size === 0) {
+      setLegacyAliasMap(new Map());
+      setResolvedLegacyFoods(new Map());
+      return;
+    }
+
+    let cancelled = false;
+    void resolveClientLegacyIds(Array.from(candidateIds))
+      .then((resolved) => {
+        if (cancelled || !isMountedRef.current) return;
+        const nextAliasMap = new Map<string, string>();
+        const nextResolvedFoods = new Map<string, FoodItem>();
+        for (const [legacyId, canonicalFood] of resolved.entries()) {
+          if (canonicalFood?.id) {
+            nextAliasMap.set(legacyId, canonicalFood.id);
+            nextResolvedFoods.set(canonicalFood.id, canonicalFood);
+          }
+        }
+        setLegacyAliasMap(nextAliasMap);
+        setResolvedLegacyFoods(nextResolvedFoods);
+      })
+      .catch(() => {
+        // Non-fatal: fallback to Dexie foodsCache or synthesized log entries
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [historyLogs, pinnedFoods, catalogSyncState.status]);
 
   const refreshHistoryAndPins = async () => {
     try {
@@ -259,14 +373,67 @@ function FoodSearchContent({ date, mealSlot, onClose }: FoodSearchContentProps) 
     }
   };
 
+  const runOnlineSearch = React.useCallback(async (trimmedQuery: string, normKey: string) => {
+    if (!trimmedQuery || !normKey) return;
+    if (onlineAbortRef.current) {
+      onlineAbortRef.current.abort();
+    }
+    const abortController = new AbortController();
+    onlineAbortRef.current = abortController;
+
+    setIsOnlineLoading(true);
+    setOnlineError(null);
+
+    try {
+      const params = new URLSearchParams({
+        q: trimmedQuery,
+        online: '1',
+        limit: '35',
+      });
+      const res = await fetch(`/api/foods/search?${params.toString()}`, {
+        signal: abortController.signal,
+      });
+      if (abortController.signal.aborted || !isMountedRef.current) return;
+
+      if (!res.ok) {
+        setOnlineError('Online search unavailable. Showing local & cached matches.');
+        setIsOnlineLoading(false);
+        return;
+      }
+
+      const data = (await res.json()) as {
+        items?: FoodItem[];
+        partialError?: string;
+      };
+      if (abortController.signal.aborted || !isMountedRef.current) return;
+
+      const items = Array.isArray(data?.items) ? data.items : [];
+      onlineQueryCache.set(normKey, items);
+      setOnlineResults(items);
+      if (data?.partialError) {
+        setOnlineError(data.partialError);
+      }
+      setIsOnlineLoading(false);
+    } catch {
+      if (abortController.signal.aborted || !isMountedRef.current) return;
+      setOnlineError('Online search unavailable. Showing local & cached matches.');
+      setIsOnlineLoading(false);
+    }
+  }, []);
+
   const handleQueryChange = (val: string) => {
     setQuery(val);
     setHighlightedIndex(-1);
     if (!val && searchInitialQuery) {
       setSearchInitialQuery('');
     }
+    if (onlineAbortRef.current) {
+      onlineAbortRef.current.abort();
+    }
     const normKey = val.trim().toLowerCase();
     if (!normKey) {
+      setCatalogResults([]);
+      setCatalogSettledQuery('');
       setOnlineResults([]);
       setIsOnlineLoading(false);
       setOnlineError(null);
@@ -280,122 +447,90 @@ function FoodSearchContent({ date, mealSlot, onClose }: FoodSearchContentProps) 
       return;
     }
     setOnlineResults([]);
-    setIsOnlineLoading(true);
+    setIsOnlineLoading(false);
     setOnlineError(null);
   };
 
-  // Progressive streaming online search across Open Food Facts (PH + Global) and USDA
+  // Instant local OPFS SQLite FTS5 catalog search (< 25ms)
   useEffect(() => {
     const trimmed = query.trim();
     const normKey = trimmed.toLowerCase();
-    if (!trimmed || onlineQueryCache.has(normKey)) return;
+    if (!trimmed) {
+      setCatalogResults([]);
+      setCatalogSettledQuery('');
+      return;
+    }
 
-    if (searchAbortRef.current) {
-      searchAbortRef.current.abort();
+    if (catalogAbortRef.current) {
+      catalogAbortRef.current.abort();
     }
     const abortController = new AbortController();
-    searchAbortRef.current = abortController;
+    catalogAbortRef.current = abortController;
 
-    const runOnlineSearch = () => {
-      if (abortController.signal.aborted) return;
-
-      const mergedMap = new Map<string, FoodItem>();
-      const seenNames = new Set<string>();
-      let settledCount = 0;
-      let failureCount = 0;
-
-      const providers = [
-        searchOffFoods(trimmed, { country: 'ph', signal: abortController.signal }),
-        searchUsdaFoods(trimmed, { signal: abortController.signal, includeBranded: true }),
-        searchOffFoods(trimmed, { country: 'world', signal: abortController.signal }),
-      ];
-
-      const markSettled = () => {
-        if (abortController.signal.aborted) return;
-        settledCount += 1;
-        if (settledCount === providers.length) {
-          const finalList = Array.from(mergedMap.values()).slice(0, 40);
-          if (failureCount === providers.length) {
-            setOnlineError('Online search unavailable. Showing local & cached matches.');
-          } else if (failureCount > 0) {
-            setOnlineError('Some online food sources unavailable.');
-            onlineQueryCache.set(normKey, finalList);
-          } else {
-            onlineQueryCache.set(normKey, finalList);
-          }
-          setIsOnlineLoading(false);
-        }
-      };
-
-      for (const promise of providers) {
-        promise
-          .then((items) => {
-            if (abortController.signal.aborted) return;
-            let added = false;
-            for (const item of items) {
-              onlineItemPool.set(item.id, item);
-              const nameKey = `${(item.name || '').toLowerCase().trim()}|${(item.brand || '').toLowerCase().trim()}`;
-              if (mergedMap.has(item.id) || (nameKey !== '|' && seenNames.has(nameKey))) {
-                continue;
-              }
-              seenNames.add(nameKey);
-              mergedMap.set(item.id, item);
-              added = true;
-            }
-            if (added) {
-              setOnlineResults(Array.from(mergedMap.values()).slice(0, 40));
-            }
-          })
-          .catch(() => {
-            if (!abortController.signal.aborted) {
-              failureCount += 1;
-            }
-          })
-          .finally(markSettled);
-      }
-    };
-
-    const timer = setTimeout(runOnlineSearch, 60);
+    void searchClientCatalog(trimmed, {
+      limit: 35,
+      signal: abortController.signal,
+    })
+      .then((res) => {
+        if (abortController.signal.aborted || !isMountedRef.current) return;
+        setCatalogResults(Array.isArray(res?.items) ? res.items : []);
+        setCatalogSettledQuery(normKey);
+      })
+      .catch(() => {
+        if (abortController.signal.aborted || !isMountedRef.current) return;
+        setCatalogResults([]);
+        setCatalogSettledQuery(normKey);
+      });
 
     return () => {
-      clearTimeout(timer);
       abortController.abort();
     };
-  }, [query, onlineRetryNonce]);
+  }, [query, catalogSyncState.status]);
 
-  // Unified pool combining local Dexie cache, offline staples + PH foods, and streamed online results
-  const combinedPool = React.useMemo(() => {
-    const map = new Map<string, FoodItem>();
-    for (const item of cachedFoods) {
-      map.set(item.id, item);
-    }
-    for (const item of staples) {
-      if (!map.has(item.id)) {
-        map.set(item.id, item);
-      }
-    }
-    for (const item of onlineResults) {
-      if (!map.has(item.id)) {
-        map.set(item.id, item);
-      }
-    }
-    if (query.trim()) {
-      for (const [id, item] of onlineItemPool) {
-        if (!map.has(id)) {
-          map.set(id, item);
-        }
-      }
-    }
-    return Array.from(map.values());
-  }, [cachedFoods, staples, onlineResults, query]);
+  // Deduplicated local results for the active query (custom foods -> catalog -> foodsCache)
+  const localMergedFoods = React.useMemo(() => {
+    const trimmed = query.trim();
+    if (!trimmed) return [];
+
+    const matchingCached = filterStaples(cachedFoods, trimmed, 30);
+    const customCached = matchingCached.filter(
+      (f) => f.source === 'custom_food' || f.source === 'custom_barcode'
+    );
+    const otherCached = matchingCached.filter(
+      (f) => f.source !== 'custom_food' && f.source !== 'custom_barcode'
+    );
+
+    return deduplicateSearchResults(
+      [...customCached, ...catalogResults, ...otherCached],
+      legacyAliasMap
+    );
+  }, [query, cachedFoods, catalogResults, legacyAliasMap]);
+
+  // Smart live fallback: auto-fire /api/foods/search?online=1 ONLY when local results < 5 and online
+  useEffect(() => {
+    const trimmed = query.trim();
+    const normKey = trimmed.toLowerCase();
+    if (!trimmed) return;
+    if (catalogSettledQuery !== normKey) return;
+    if (onlineQueryCache.has(normKey)) return;
+    if (localMergedFoods.length >= 5) return;
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+
+    void runOnlineSearch(trimmed, normKey);
+  }, [query, catalogSettledQuery, localMergedFoods.length, runOnlineSearch]);
 
   const foodsById = React.useMemo(() => {
     const map = new Map<string, FoodItem>();
-    for (const item of staples) {
-      map.set(item.id, item);
-    }
     for (const item of cachedFoods) {
       map.set(item.id, item);
+    }
+    for (const [id, item] of resolvedLegacyFoods.entries()) {
+      map.set(id, item);
+    }
+    for (const item of catalogResults) {
+      if (!map.has(item.id)) {
+        map.set(item.id, item);
+      }
     }
     for (const item of onlineResults) {
       if (!map.has(item.id)) {
@@ -403,31 +538,40 @@ function FoodSearchContent({ date, mealSlot, onClose }: FoodSearchContentProps) 
       }
     }
     return map;
-  }, [staples, cachedFoods, onlineResults]);
+  }, [cachedFoods, resolvedLegacyFoods, catalogResults, onlineResults]);
 
   const recipesById = React.useMemo(
     () => new Map<string, CustomRecipe>(customRecipes.map((r) => [r.id, r])),
     [customRecipes]
   );
 
-  const pinnedIdSet = React.useMemo(
-    () => new Set<string>(pinnedFoods.map((p) => p.id)),
-    [pinnedFoods]
-  );
+  const pinnedIdSet = React.useMemo(() => {
+    const set = new Set<string>();
+    for (const p of pinnedFoods) {
+      set.add(p.id);
+      if (p.kind === 'food') {
+        const canonical = legacyAliasMap.get(p.refId);
+        if (canonical) {
+          set.add(`food:${canonical}`);
+        }
+      }
+    }
+    return set;
+  }, [pinnedFoods, legacyAliasMap]);
 
   const recentEntries = React.useMemo(
-    () => computeRecentEntries(historyLogs, foodsById, recipesById, 25),
-    [historyLogs, foodsById, recipesById]
+    () => computeRecentEntries(historyLogs, foodsById, recipesById, 25, legacyAliasMap),
+    [historyLogs, foodsById, recipesById, legacyAliasMap]
   );
 
   const frequentEntries = React.useMemo(
-    () => computeFrequentEntries(historyLogs, foodsById, recipesById, 60, 25),
-    [historyLogs, foodsById, recipesById]
+    () => computeFrequentEntries(historyLogs, foodsById, recipesById, 60, 25, legacyAliasMap),
+    [historyLogs, foodsById, recipesById, legacyAliasMap]
   );
 
   const pinnedEntries = React.useMemo(
-    () => computePinnedEntries(pinnedFoods, foodsById, recipesById, historyLogs),
-    [pinnedFoods, foodsById, recipesById, historyLogs]
+    () => computePinnedEntries(pinnedFoods, foodsById, recipesById, historyLogs, legacyAliasMap),
+    [pinnedFoods, foodsById, recipesById, historyLogs, legacyAliasMap]
   );
 
   const lastPortionMap = React.useMemo(() => {
@@ -451,42 +595,28 @@ function FoodSearchContent({ date, mealSlot, onClose }: FoodSearchContentProps) 
       if (activeTab === 'pinned') {
         return pinnedEntries;
       }
-      // Recents tab: show recent entries first, followed by unlogged suggested staples
+      // Recents tab: show recent entries first, followed by unlogged cached local foods
       const seenFoodIds = new Set<string>();
       for (const r of recentEntries) {
         if (r.kind === 'food') {
           seenFoodIds.add(r.food.id);
         }
       }
-      const fallbackStaples = filterStaples(combinedPool, '', 40)
+      const fallbackLocal = deduplicateSearchResults(cachedFoods, legacyAliasMap)
         .filter((f) => !seenFoodIds.has(f.id))
+        .slice(0, 40)
         .map((food) => ({
           kind: 'food' as const,
           food,
         }));
-      return [...recentEntries, ...fallbackStaples].slice(0, 40);
+      return [...recentEntries, ...fallbackLocal].slice(0, 40);
     }
 
     const matchingRecipes = searchCustomRecipes(customRecipes, trimmed, 12);
-    const rankedFoods = filterStaples(combinedPool, trimmed, 40);
-    const seenIds = new Set(rankedFoods.map((r) => r.id));
-    const seenNames = new Set(
-      rankedFoods.map(
-        (r) => `${(r.name || '').toLowerCase().trim()}|${(r.brand || '').toLowerCase().trim()}`
-      )
-    );
-
-    const combinedFoods = [...rankedFoods];
-    for (const item of onlineResults) {
-      if (combinedFoods.length >= 48) break;
-      const nameKey = `${(item.name || '').toLowerCase().trim()}|${(item.brand || '').toLowerCase().trim()}`;
-      if (seenIds.has(item.id) || (nameKey !== '|' && seenNames.has(nameKey))) {
-        continue;
-      }
-      seenIds.add(item.id);
-      seenNames.add(nameKey);
-      combinedFoods.push(item);
-    }
+    const combinedFoods = deduplicateSearchResults(
+      [...localMergedFoods, ...onlineResults],
+      legacyAliasMap
+    ).slice(0, 48);
 
     const entries: SearchableEntry[] = [];
     for (const recipe of matchingRecipes) {
@@ -513,9 +643,11 @@ function FoodSearchContent({ date, mealSlot, onClose }: FoodSearchContentProps) 
     frequentEntries,
     pinnedEntries,
     recentEntries,
-    combinedPool,
+    cachedFoods,
     customRecipes,
+    localMergedFoods,
     onlineResults,
+    legacyAliasMap,
     lastPortionMap,
   ]);
 
@@ -744,7 +876,26 @@ function FoodSearchContent({ date, mealSlot, onClose }: FoodSearchContentProps) 
   ) => {
     e.stopPropagation();
     const refId = entry.kind === 'recipe' ? entry.recipe.id : entry.food.id;
-    await togglePinEntry(entry.kind, refId);
+    const pinKey = `${entry.kind}:${refId}`;
+    const wasPinned = pinnedIdSet.has(pinKey);
+
+    if (wasPinned && entry.kind === 'food') {
+      const aliasPinIds = pinnedFoods
+        .filter(
+          (p) =>
+            p.kind === 'food' &&
+            (p.refId === refId || legacyAliasMap.get(p.refId) === refId)
+        )
+        .map((p) => p.id);
+      if (aliasPinIds.length > 0) {
+        await db.pinnedFoods.bulkDelete(aliasPinIds);
+      } else {
+        await togglePinEntry(entry.kind, refId);
+      }
+    } else {
+      await togglePinEntry(entry.kind, refId);
+    }
+
     triggerHaptic(6);
     const pins = await db.pinnedFoods.toArray();
     setPinnedFoods(pins);
@@ -1266,7 +1417,7 @@ function FoodSearchContent({ date, mealSlot, onClose }: FoodSearchContentProps) 
                       aria-hidden="true"
                     />
                     <span className="text-muted-foreground">
-                      Searching Open Food Facts &amp; USDA...
+                      Searching online food databases...
                     </span>
                   </>
                 ) : (
@@ -1277,11 +1428,10 @@ function FoodSearchContent({ date, mealSlot, onClose }: FoodSearchContentProps) 
                     <button
                       type="button"
                       onClick={() => {
-                        const normKey = query.trim().toLowerCase();
+                        const trimmed = query.trim();
+                        const normKey = trimmed.toLowerCase();
                         if (normKey) onlineQueryCache.delete(normKey);
-                        setOnlineError(null);
-                        setIsOnlineLoading(true);
-                        setOnlineRetryNonce((n) => n + 1);
+                        void runOnlineSearch(trimmed, normKey);
                       }}
                       className="tactile-press shrink-0 px-2 py-0.5 rounded-full bg-surface-sub border border-border text-[11px] font-semibold text-foreground hover:bg-surface-elevated"
                     >
@@ -1299,135 +1449,154 @@ function FoodSearchContent({ date, mealSlot, onClose }: FoodSearchContentProps) 
               className="flex-1 overflow-y-auto overscroll-contain space-y-1.5 min-h-[200px] sm:min-h-[280px] max-h-[52dvh] sm:max-h-[420px] pr-0.5"
             >
               {displayedEntries.length > 0 ? (
-                displayedEntries.map((entry, idx) => {
-                  const isRecipe = entry.kind === 'recipe';
-                  const itemId = isRecipe ? entry.recipe.id : entry.food.id;
-                  const itemName = isRecipe
-                    ? entry.recipe.name
-                    : entry.food.name;
-                  const itemBrand = isRecipe ? undefined : entry.food.brand;
-                  const itemRegion = isRecipe ? undefined : entry.food.region;
-                  const itemSource = isRecipe ? 'recipe' : entry.food.source;
-                  const nutrients = isRecipe
-                    ? entry.recipe.nutrientsPerBasis
-                    : entry.food.nutrientsPerBasis;
-                  const basisLabel = isRecipe
-                    ? formatRecipeBasisLabel(entry.recipe)
-                    : formatFoodBasisLabel(entry.food);
-                  const pinKey = `${entry.kind}:${itemId}`;
-                  const isPinned = pinnedIdSet.has(pinKey);
+                <>
+                  {displayedEntries.map((entry, idx) => {
+                    const isRecipe = entry.kind === 'recipe';
+                    const itemId = isRecipe ? entry.recipe.id : entry.food.id;
+                    const itemName = isRecipe
+                      ? entry.recipe.name
+                      : entry.food.name;
+                    const itemBrand = isRecipe ? undefined : entry.food.brand;
+                    const itemRegion = isRecipe ? undefined : entry.food.region;
+                    const badge = isRecipe ? null : getFoodSourceBadge(entry.food);
+                    const nutrients = isRecipe
+                      ? entry.recipe.nutrientsPerBasis
+                      : entry.food.nutrientsPerBasis;
+                    const basisLabel = isRecipe
+                      ? formatRecipeBasisLabel(entry.recipe)
+                      : formatFoodBasisLabel(entry.food);
+                    const pinKey = `${entry.kind}:${itemId}`;
+                    const isPinned = pinnedIdSet.has(pinKey);
 
-                  return (
-                    <div
-                      key={pinKey}
-                      data-highlighted={
-                        highlightedIndex === idx ? 'true' : undefined
-                      }
-                      style={{ animationDelay: `${Math.min(idx, 8) * 25}ms` }}
-                      onClick={() => handleSelectEntry(entry)}
-                      className={`tactile-press stagger-item w-full text-left p-3 rounded-xl border group flex items-center justify-between gap-2.5 cursor-pointer ${
-                        highlightedIndex === idx
-                          ? 'bg-accent border-border-focus'
-                          : 'bg-surface-sub hover:bg-accent border-border hover:border-border-focus'
-                      }`}
-                    >
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="text-xs font-semibold text-foreground line-clamp-1 group-hover:text-foreground">
-                            {itemName}
-                          </span>
-                          {itemRegion === 'PH' && (
-                            <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded-md font-semibold bg-emerald-500/15 text-emerald-500 shrink-0">
-                              PH
+                    return (
+                      <div
+                        key={pinKey}
+                        data-highlighted={
+                          highlightedIndex === idx ? 'true' : undefined
+                        }
+                        style={{ animationDelay: `${Math.min(idx, 8) * 25}ms` }}
+                        onClick={() => handleSelectEntry(entry)}
+                        className={`tactile-press stagger-item w-full text-left p-3 rounded-xl border group flex items-center justify-between gap-2.5 cursor-pointer ${
+                          highlightedIndex === idx
+                            ? 'bg-accent border-border-focus'
+                            : 'bg-surface-sub hover:bg-accent border-border hover:border-border-focus'
+                        }`}
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-xs font-semibold text-foreground line-clamp-1 group-hover:text-foreground">
+                              {itemName}
                             </span>
-                          )}
-                          {isRecipe ? (
-                            <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded-md font-semibold bg-[var(--macro-fiber)]/15 text-[var(--macro-fiber)] shrink-0 inline-flex items-center gap-1">
-                              <ChefHat
-                                className="w-2.5 h-2.5"
-                                aria-hidden="true"
-                              />
-                              RECIPE
-                            </span>
-                          ) : (
-                            <span
-                              className={`text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded-md font-medium shrink-0 inline-flex items-center gap-1 ${
-                                itemSource === 'staple'
-                                  ? 'bg-[var(--macro-carbs)]/15 text-[var(--macro-carbs)]'
-                                  : 'bg-[var(--macro-calories)]/15 text-[var(--macro-calories)]'
-                              }`}
-                            >
-                              {(itemSource === 'off' ||
-                                itemSource === 'usda') && (
-                                <Globe
+                            {itemRegion === 'PH' && (
+                              <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded-md font-semibold bg-emerald-500/15 text-emerald-500 shrink-0">
+                                PH
+                              </span>
+                            )}
+                            {isRecipe ? (
+                              <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded-md font-semibold bg-[var(--macro-fiber)]/15 text-[var(--macro-fiber)] shrink-0 inline-flex items-center gap-1">
+                                <ChefHat
                                   className="w-2.5 h-2.5"
                                   aria-hidden="true"
                                 />
-                              )}
-                              {itemSource}
-                            </span>
-                          )}
-                          {entry.lastAmount !== undefined &&
-                            entry.lastUnit && (
-                              <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-card border border-border text-muted-foreground tabular-nums">
-                                Last: {entry.lastAmount} {entry.lastUnit}
+                                RECIPE
                               </span>
-                            )}
+                            ) : badge ? (
+                              <span
+                                className={`text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded-md font-medium shrink-0 inline-flex items-center gap-1 ${badge.toneClass}`}
+                              >
+                                {badge.showGlobe && (
+                                  <Globe
+                                    className="w-2.5 h-2.5"
+                                    aria-hidden="true"
+                                  />
+                                )}
+                                {badge.label}
+                              </span>
+                            ) : null}
+                            {entry.lastAmount !== undefined &&
+                              entry.lastUnit && (
+                                <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-card border border-border text-muted-foreground tabular-nums">
+                                  Last: {entry.lastAmount} {entry.lastUnit}
+                                </span>
+                              )}
+                          </div>
+                          {itemBrand && (
+                            <p className="text-[10px] text-muted-foreground truncate mt-0.5">
+                              {itemBrand}
+                            </p>
+                          )}
+                          <div className="flex items-center flex-wrap gap-x-2 gap-y-0.5 mt-1 text-[11px] text-muted-foreground tabular-nums">
+                            <span className="text-[var(--macro-calories)] font-semibold">
+                              {nutrients.calories} kcal
+                            </span>
+                            <span>&bull;</span>
+                            <span className="text-[var(--macro-protein)]">
+                              P: {nutrients.protein}g
+                            </span>
+                            <span className="text-[var(--macro-carbs)]">
+                              C: {nutrients.carbs}g
+                            </span>
+                            <span className="text-[var(--macro-fat)]">
+                              F: {nutrients.fat}g
+                            </span>
+                            <span className="text-[10px] text-muted-foreground/70">
+                              {basisLabel}
+                            </span>
+                          </div>
                         </div>
-                        {itemBrand && (
-                          <p className="text-[10px] text-muted-foreground truncate mt-0.5">
-                            {itemBrand}
-                          </p>
-                        )}
-                        <div className="flex items-center flex-wrap gap-x-2 gap-y-0.5 mt-1 text-[11px] text-muted-foreground tabular-nums">
-                          <span className="text-[var(--macro-calories)] font-semibold">
-                            {nutrients.calories} kcal
-                          </span>
-                          <span>&bull;</span>
-                          <span className="text-[var(--macro-protein)]">
-                            P: {nutrients.protein}g
-                          </span>
-                          <span className="text-[var(--macro-carbs)]">
-                            C: {nutrients.carbs}g
-                          </span>
-                          <span className="text-[var(--macro-fat)]">
-                            F: {nutrients.fat}g
-                          </span>
-                          <span className="text-[10px] text-muted-foreground/70">
-                            {basisLabel}
-                          </span>
-                        </div>
-                      </div>
 
-                      {/* Per-Row Pin & 1-Tap Quick-Log Actions */}
-                      <div className="flex items-center gap-1.5 shrink-0">
+                        {/* Per-Row Pin & 1-Tap Quick-Log Actions */}
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            type="button"
+                            onClick={(e) => void handleTogglePin(e, entry)}
+                            aria-label={
+                              isPinned ? `Unpin ${itemName}` : `Pin ${itemName}`
+                            }
+                            aria-pressed={isPinned}
+                            className={`touch-target p-1.5 rounded-full border transition-colors ${
+                              isPinned
+                                ? 'bg-foreground text-background border-foreground'
+                                : 'bg-card text-muted-foreground border-border hover:text-foreground'
+                            }`}
+                          >
+                            <Pin className="w-3.5 h-3.5" aria-hidden="true" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => void handleQuickLogEntry(e, entry)}
+                            aria-label={`Quick log ${itemName}`}
+                            className="touch-target p-1.5 rounded-full bg-card border border-border text-muted-foreground hover:bg-foreground hover:text-background hover:border-foreground transition-colors"
+                          >
+                            <Plus className="w-4 h-4" aria-hidden="true" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {query.trim() &&
+                    !isOnlineLoading &&
+                    !onlineQueryCache.has(query.trim().toLowerCase()) && (
+                      <div className="pt-1.5 pb-1">
                         <button
                           type="button"
-                          onClick={(e) => void handleTogglePin(e, entry)}
-                          aria-label={
-                            isPinned ? `Unpin ${itemName}` : `Pin ${itemName}`
+                          onClick={() =>
+                            void runOnlineSearch(
+                              query.trim(),
+                              query.trim().toLowerCase()
+                            )
                           }
-                          aria-pressed={isPinned}
-                          className={`touch-target p-1.5 rounded-full border transition-colors ${
-                            isPinned
-                              ? 'bg-foreground text-background border-foreground'
-                              : 'bg-card text-muted-foreground border-border hover:text-foreground'
-                          }`}
+                          className="tactile-press w-full py-2 px-3 rounded-xl bg-surface-sub border border-border hover:bg-accent hover:border-border-focus text-xs font-semibold text-foreground flex items-center justify-center gap-1.5 transition-colors"
                         >
-                          <Pin className="w-3.5 h-3.5" aria-hidden="true" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={(e) => void handleQuickLogEntry(e, entry)}
-                          aria-label={`Quick log ${itemName}`}
-                          className="touch-target p-1.5 rounded-full bg-card border border-border text-muted-foreground hover:bg-foreground hover:text-background hover:border-foreground transition-colors"
-                        >
-                          <Plus className="w-4 h-4" aria-hidden="true" />
+                          <Globe
+                            className="w-3.5 h-3.5 text-[var(--macro-calories)]"
+                            aria-hidden="true"
+                          />
+                          <span>Search online</span>
                         </button>
                       </div>
-                    </div>
-                  );
-                })
+                    )}
+                </>
               ) : isOnlineLoading ? (
                 <FoodRowSkeleton count={4} />
               ) : (
@@ -1461,8 +1630,27 @@ function FoodSearchContent({ date, mealSlot, onClose }: FoodSearchContentProps) 
                         ? 'No pinned foods or recipes yet. Tap the pin button on any item to save it here.'
                         : activeTab === 'frequent'
                           ? 'No frequent logs in the last 60 days yet.'
-                          : 'Search offline staples, PH foods, or online Open Food Facts & USDA databases above.'}
+                          : 'Search offline catalog, regional foods, or online databases above.'}
                   </p>
+                  {query.trim() &&
+                    !onlineQueryCache.has(query.trim().toLowerCase()) && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void runOnlineSearch(
+                            query.trim(),
+                            query.trim().toLowerCase()
+                          )
+                        }
+                        className="tactile-press mt-1 py-1.5 px-3.5 rounded-full bg-surface-sub border border-border hover:bg-accent text-xs font-semibold text-foreground inline-flex items-center gap-1.5"
+                      >
+                        <Globe
+                          className="w-3.5 h-3.5 text-[var(--macro-calories)]"
+                          aria-hidden="true"
+                        />
+                        <span>Search online</span>
+                      </button>
+                    )}
                 </div>
               )}
             </div>
