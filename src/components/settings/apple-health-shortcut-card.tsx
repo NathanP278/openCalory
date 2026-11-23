@@ -106,11 +106,12 @@ export function AppleHealthShortcutCard() {
       };
 
   const shortcutStepsText = [
-    `1. Get Contents of URL: ${endpointUrl} (Method: GET, Header -> ${authHeaderSnippet}). Only returns weigh-ins logged for today's date (ignoring backfilled past entries).`,
-    `2. Get Dictionary Value for "id", "weight_kg" (or "weight_lb"), and "recorded_at". If "id" has no value (null when no weigh-in is logged today), stop.`,
-    `3. Deduplicate via iCloud Drive: Get File from iCloud Drive at "Shortcuts/opencalory-last-weight-id.txt" (disable Error If Not Found).`,
-    `4. If "id" has any value and File does not match "id": Log Health Sample (Type: Weight, Value: weight_kg, Date: recorded_at) and Save "id" to "Shortcuts/opencalory-last-weight-id.txt" (Overwrite).`,
-  ].join('\n');
+    `1. Get Contents of URL: Call GET ${endpointUrl} with header ${authHeaderSnippet}.`,
+    `2. Get Dictionary Value & Validate:\n   - Get Value for "id" in Contents of URL.\n   - Get Value for "weight_kg" in Contents of URL.\n   - If "weight_kg" (Dictionary Value) is less than or equal to 0 -> Stop this shortcut. (Also verify "id" has a value if no entry exists today.)\n   - End If`,
+    `3. Parse Date & Check Deduplication File:\n   - Get Value for "recorded_at" in Contents of URL.\n   - Get dates from "recorded_at" (Dictionary Value).\n   - Get file from Shortcuts at path "opencalory-last-weight-id.txt" (with Error If Not Found turned off).`,
+    `4. Log Health Sample & Save ID:\n   - If File is not "id" (Dictionary Value):\n     - Log Health Sample: Type = Weight, Value = "weight_kg" (Dictionary Value) kg, Date = Dates.\n     - Text: Set to "id" (Dictionary Value).\n     - Save Text to Shortcuts (path: "opencalory-last-weight-id.txt", with Overwrite If File Already Exists turned on).\n   - End If`,
+    `5. Automate Daily Sync: Open the Automation tab in Shortcuts -> tap + -> Time of Day -> set your preferred daily sync time (e.g., 11:30 PM), select Daily and Run Immediately -> tap Next and choose your shortcut (Run Shortcut -> select the shortcut you built).`,
+  ].join('\n\n');
 
   return (
     <section
@@ -254,11 +255,11 @@ export function AppleHealthShortcutCard() {
         </pre>
       </div>
 
-      {/* 4-Step iOS Shortcut & iCloud Drive Deduplication Guide */}
-      <div className="bg-surface-sub rounded-xl p-3 space-y-2 text-xs">
+      {/* 5-Step iOS Personal Automation Guide */}
+      <div className="bg-surface-sub rounded-xl p-3 space-y-2.5 text-xs">
         <div className="flex items-center justify-between gap-2">
           <span className="font-semibold text-foreground">
-            4-Step iOS Personal Automation Guide
+            5-Step iOS Personal Automation Guide
           </span>
           <button
             type="button"
@@ -278,33 +279,104 @@ export function AppleHealthShortcutCard() {
             )}
           </button>
         </div>
-        <ol className="list-decimal list-inside space-y-1.5 text-[11px] text-muted-foreground leading-relaxed">
+        <ol className="list-decimal list-inside space-y-2.5 text-[11px] text-muted-foreground leading-relaxed">
           <li>
             <span className="text-foreground font-medium">Get Contents of URL:</span>{' '}
-            Call <code className="font-mono text-[10px]">GET /api/weight/latest?tz=Asia/Manila</code> with{' '}
+            Call <code className="font-mono text-[10px]">GET {endpointUrl}</code> with header{' '}
             <code className="font-mono text-[10px]">Authorization: Bearer &lt;key&gt;</code>.
           </li>
           <li>
-            <span className="text-foreground font-medium">Get Dictionary Value:</span>{' '}
-            Read top-level <code className="font-mono text-[10px]">id</code>,{' '}
-            <code className="font-mono text-[10px]">weight_kg</code> (or{' '}
-            <code className="font-mono text-[10px]">weight_lb</code>), and{' '}
-            <code className="font-mono text-[10px]">recorded_at</code>.
+            <span className="text-foreground font-medium">Get Dictionary Value &amp; Validate:</span>
+            <ul className="list-disc list-inside pl-3 mt-1 space-y-1">
+              <li>
+                Get Value for <code className="font-mono text-[10px]">id</code> in{' '}
+                <code className="font-mono text-[10px]">Contents of URL</code>.
+              </li>
+              <li>
+                Get Value for <code className="font-mono text-[10px]">weight_kg</code> in{' '}
+                <code className="font-mono text-[10px]">Contents of URL</code>.
+              </li>
+              <li>
+                <strong className="text-foreground font-medium">If</strong>{' '}
+                <code className="font-mono text-[10px]">weight_kg</code> (
+                <code className="font-mono text-[10px]">Dictionary Value</code>) is less than or equal to{' '}
+                <code className="font-mono text-[10px]">0</code> &rarr;{' '}
+                <strong className="text-foreground font-medium">Stop this shortcut</strong>. (Also verify{' '}
+                <code className="font-mono text-[10px]">id</code> has a value if no entry exists today.)
+              </li>
+              <li>
+                <strong className="text-foreground font-medium">End If</strong>
+              </li>
+            </ul>
           </li>
           <li>
             <span className="text-foreground font-medium">
-              iCloud Drive Deduplication:
-            </span>{' '}
-            Read <code className="font-mono text-[10px]">Shortcuts/opencalory-last-weight-id.txt</code>{' '}
-            from iCloud Drive (with <em>Error If Not Found</em> turned off).
+              Parse Date &amp; Check Deduplication File:
+            </span>
+            <ul className="list-disc list-inside pl-3 mt-1 space-y-1">
+              <li>
+                Get Value for <code className="font-mono text-[10px]">recorded_at</code> in{' '}
+                <code className="font-mono text-[10px]">Contents of URL</code>.
+              </li>
+              <li>
+                <strong className="text-foreground font-medium">Get dates from</strong>{' '}
+                <code className="font-mono text-[10px]">recorded_at</code> (
+                <code className="font-mono text-[10px]">Dictionary Value</code>).
+              </li>
+              <li>
+                <strong className="text-foreground font-medium">Get file from</strong>{' '}
+                <code className="font-mono text-[10px]">Shortcuts</code> at path{' '}
+                <code className="font-mono text-[10px]">opencalory-last-weight-id.txt</code> (with{' '}
+                <em>Error If Not Found</em> turned off).
+              </li>
+            </ul>
           </li>
           <li>
-            <span className="text-foreground font-medium">Log Health Sample:</span>{' '}
-            If <code className="font-mono text-[10px]">id</code> has any value and the saved ID does not match{' '}
-            <code className="font-mono text-[10px]">id</code>, run <strong>Log Health Sample</strong> (Weight, Date ={' '}
-            <code className="font-mono text-[10px]">recorded_at</code>) and overwrite the{' '}
-            <code className="font-mono text-[10px]">.txt</code> file with the new{' '}
-            <code className="font-mono text-[10px]">id</code>.
+            <span className="text-foreground font-medium">Log Health Sample &amp; Save ID:</span>
+            <ul className="list-disc list-inside pl-3 mt-1 space-y-1">
+              <li>
+                <strong className="text-foreground font-medium">If</strong>{' '}
+                <code className="font-mono text-[10px]">File</code> is not{' '}
+                <code className="font-mono text-[10px]">id</code> (
+                <code className="font-mono text-[10px]">Dictionary Value</code>):
+                <ul className="list-disc list-inside pl-3.5 mt-1 space-y-1">
+                  <li>
+                    <strong className="text-foreground font-medium">Log Health Sample:</strong> Type ={' '}
+                    <code className="font-mono text-[10px]">Weight</code>, Value ={' '}
+                    <code className="font-mono text-[10px]">weight_kg</code> (
+                    <code className="font-mono text-[10px]">Dictionary Value</code>){' '}
+                    <code className="font-mono text-[10px]">kg</code>, Date ={' '}
+                    <code className="font-mono text-[10px]">Dates</code>.
+                  </li>
+                  <li>
+                    <strong className="text-foreground font-medium">Text:</strong> Set to{' '}
+                    <code className="font-mono text-[10px]">id</code> (
+                    <code className="font-mono text-[10px]">Dictionary Value</code>).
+                  </li>
+                  <li>
+                    <strong className="text-foreground font-medium">Save</strong>{' '}
+                    <code className="font-mono text-[10px]">Text</code> to{' '}
+                    <code className="font-mono text-[10px]">Shortcuts</code> (path:{' '}
+                    <code className="font-mono text-[10px]">opencalory-last-weight-id.txt</code>, with{' '}
+                    <em>Overwrite If File Already Exists</em> turned on).
+                  </li>
+                </ul>
+              </li>
+              <li>
+                <strong className="text-foreground font-medium">End If</strong>
+              </li>
+            </ul>
+          </li>
+          <li>
+            <span className="text-foreground font-medium">Automate Daily Sync:</span>{' '}
+            Open the <strong className="text-foreground font-medium">Automation</strong> tab in Shortcuts &rarr; tap{' '}
+            <strong className="text-foreground font-medium">+</strong> &rarr;{' '}
+            <strong className="text-foreground font-medium">Time of Day</strong> &rarr; set your preferred daily sync time (e.g.,{' '}
+            <code className="font-mono text-[10px]">11:30 PM</code>), select{' '}
+            <strong className="text-foreground font-medium">Daily</strong> and{' '}
+            <strong className="text-foreground font-medium">Run Immediately</strong> &rarr; tap{' '}
+            <strong className="text-foreground font-medium">Next</strong> and choose your shortcut (
+            <code className="font-mono text-[10px]">Run Shortcut</code> &rarr; select the shortcut you built).
           </li>
         </ol>
       </div>

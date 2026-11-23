@@ -156,7 +156,7 @@ describe('WeighInDrawer & AppleHealthShortcutCard', () => {
     });
   });
 
-  it('renders AppleHealthShortcutCard with server status, ?tz=Asia/Manila URL, today-only note, latest JSON preview, and 4-step iCloud deduplication guide', async () => {
+  it('renders AppleHealthShortcutCard with server status, ?tz=Asia/Manila URL, today-only note, latest JSON preview, and 5-step iOS Personal Automation Guide', async () => {
     await db.weightLogs.put({
       id: 'w_200',
       date: '2026-11-20',
@@ -184,7 +184,9 @@ describe('WeighInDrawer & AppleHealthShortcutCard', () => {
       ).toBeGreaterThan(0);
       expect(screen.getByText(/backfilled/i)).toBeInTheDocument();
       expect(screen.getAllByText(/168\.65/).length).toBeGreaterThan(0);
-      expect(screen.getAllByText(/icloud drive/i).length).toBeGreaterThan(0);
+      expect(screen.getByText(/5-step ios personal automation guide/i)).toBeInTheDocument();
+      expect(screen.getAllByText(/opencalory-last-weight-id\.txt/i).length).toBeGreaterThan(0);
+      expect(screen.getByText(/automate daily sync/i)).toBeInTheDocument();
     });
 
     fetchSpy.mockRestore();
