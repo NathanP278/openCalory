@@ -34,6 +34,10 @@ export type FoodSource =
   | 'staple'
   | 'usda'
   | 'off'
+  | 'catalog'
+  | 'fatsecret'
+  | 'edamam'
+  | 'nutritionix'
   | 'custom_barcode'
   | 'custom_food'
   | 'ai_scan'
@@ -65,10 +69,22 @@ export interface FoodServingOption {
 export interface FoodItem {
   id: string;
   barcode?: string | null;
-  source: 'staple' | 'usda' | 'off' | 'custom_barcode' | 'custom_food';
+  source:
+    | 'staple'
+    | 'usda'
+    | 'off'
+    | 'catalog'
+    | 'fatsecret'
+    | 'edamam'
+    | 'nutritionix'
+    | 'custom_barcode'
+    | 'custom_food';
+  accuracyTier?: 1 | 2 | 3 | 4;
+  category?: string;
+  aliases?: string[];
   name: string;
   brand?: string;
-  region?: 'PH' | 'GLOBAL';
+  region?: string;
   basis: NutritionBasis;
   servingSize: number;
   servingUnit: string;
