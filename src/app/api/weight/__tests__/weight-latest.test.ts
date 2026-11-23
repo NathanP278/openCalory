@@ -42,14 +42,22 @@ describe('GET /api/weight/latest and GET /api/weight/status', () => {
 
     const statusUnconfigured = await getStatus();
     expect(statusUnconfigured.status).toBe(200);
-    expect(await statusUnconfigured.json()).toEqual({ configured: false });
+    expect(await statusUnconfigured.json()).toEqual({
+      configured: false,
+      connected: false,
+      lastSyncedAt: null,
+    });
 
     process.env.SHORTCUT_API_KEY = 'shortcut-secret';
 
     const statusConfigured = await getStatus();
     expect(statusConfigured.status).toBe(200);
     expect(statusConfigured.headers.get('cache-control')).toMatch(/no-store/i);
-    expect(await statusConfigured.json()).toEqual({ configured: true });
+    expect(await statusConfigured.json()).toEqual({
+      configured: true,
+      connected: false,
+      lastSyncedAt: null,
+    });
 
     const missingAuthRes = await GET(
       new Request('http://localhost/api/weight/latest')
@@ -64,6 +72,14 @@ describe('GET /api/weight/latest and GET /api/weight/status', () => {
     expect(wrongAuthRes.status).toBe(401);
     expect(wrongAuthRes.headers.get('cache-control')).toMatch(/no-store/i);
 
+    // Unauthorized calls must NOT mark the shortcut as connected
+    const statusAfterFailedAuth = await getStatus();
+    expect(await statusAfterFailedAuth.json()).toEqual({
+      configured: true,
+      connected: false,
+      lastSyncedAt: null,
+    });
+
     const emptyRes = await GET(
       new Request('http://localhost/api/weight/latest?date=2026-11-21', {
         headers: { Authorization: 'Bearer shortcut-secret' },
@@ -72,6 +88,17 @@ describe('GET /api/weight/latest and GET /api/weight/status', () => {
     expect(emptyRes.status).toBe(200);
     expect(emptyRes.headers.get('cache-control')).toMatch(/no-store/i);
     expect(await emptyRes.json()).toEqual(EMPTY_PAYLOAD);
+
+    // First authenticated call marks shortcut as connected and records lastSyncedAt
+    const statusAfterConnected = await getStatus();
+    const statusAfterConnectedBody = (await statusAfterConnected.json()) as {
+      configured: boolean;
+      connected: boolean;
+      lastSyncedAt: string | null;
+    };
+    expect(statusAfterConnectedBody.configured).toBe(true);
+    expect(statusAfterConnectedBody.connected).toBe(true);
+    expect(typeof statusAfterConnectedBody.lastSyncedAt).toBe('string');
 
     // Backfilled past entries should NOT be returned when querying today (2026-11-21)
     await applyTableMutation({

@@ -1,7 +1,10 @@
 import crypto from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { NO_STORE_HEADERS } from '@/lib/auth/sync-auth';
-import { getLatestWeightLog } from '@/lib/db/server-db';
+import {
+  getLatestWeightLog,
+  recordShortcutSyncTimestamp,
+} from '@/lib/db/server-db';
 
 export const dynamic = 'force-dynamic';
 
@@ -105,6 +108,7 @@ export async function GET(request: Request) {
   }
 
   try {
+    await recordShortcutSyncTimestamp();
     const latest = await getLatestWeightLog(targetDate);
     if (!latest) {
       return NextResponse.json(EMPTY_WEIGHT_RESPONSE, {

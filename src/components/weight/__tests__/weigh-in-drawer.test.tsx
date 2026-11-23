@@ -156,7 +156,7 @@ describe('WeighInDrawer & AppleHealthShortcutCard', () => {
     });
   });
 
-  it('renders AppleHealthShortcutCard with server status, ?tz=Asia/Manila URL, today-only note, latest JSON preview, and 5-step iOS Personal Automation Guide', async () => {
+  it('renders AppleHealthShortcutCard with Awaiting Shortcut Setup before first call, then Connected after shortcut syncs', async () => {
     await db.weightLogs.put({
       id: 'w_200',
       date: '2026-11-20',
@@ -167,18 +167,40 @@ describe('WeighInDrawer & AppleHealthShortcutCard', () => {
       updatedAt: 2000,
     });
 
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
-      new Response(JSON.stringify({ configured: true }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      })
-    );
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            configured: true,
+            connected: false,
+            lastSyncedAt: null,
+          }),
+          {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            configured: true,
+            connected: true,
+            lastSyncedAt: '2026-11-23T15:30:00.000Z',
+          }),
+          {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }
+        )
+      );
 
     render(<AppleHealthShortcutCard />);
 
     await waitFor(() => {
       expect(screen.getByText(/apple health ios shortcut/i)).toBeInTheDocument();
-      expect(screen.getByText(/^configured$/i)).toBeInTheDocument();
+      expect(screen.getByText(/^awaiting shortcut setup$/i)).toBeInTheDocument();
       expect(
         screen.getAllByText(/\/api\/weight\/latest\?tz=Asia\/Manila/i).length
       ).toBeGreaterThan(0);
@@ -187,6 +209,15 @@ describe('WeighInDrawer & AppleHealthShortcutCard', () => {
       expect(screen.getByText(/5-step ios personal automation guide/i)).toBeInTheDocument();
       expect(screen.getAllByText(/opencalory-last-weight-id\.txt/i).length).toBeGreaterThan(0);
       expect(screen.getByText(/automate daily sync/i)).toBeInTheDocument();
+    });
+
+    fireEvent.click(
+      screen.getByRole('button', { name: /refresh shortcut api status/i })
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/^connected$/i)).toBeInTheDocument();
+      expect(screen.getByText(/last shortcut sync/i)).toBeInTheDocument();
     });
 
     fetchSpy.mockRestore();

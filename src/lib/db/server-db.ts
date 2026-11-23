@@ -31,6 +31,13 @@ export interface ServerDbStatus {
   label: string;
 }
 
+export interface ShortcutSyncStatus {
+  connected: boolean;
+  lastSyncedAt: string | null;
+}
+
+const SHORTCUT_SYNC_METADATA_KEY = 'shortcut_last_sync_at';
+
 export interface CentralTablesPayload {
   foodLogs: FoodLogEntry[];
   foodsCache: FoodItem[];
@@ -243,6 +250,12 @@ export async function ensureServerSchema(): Promise<void> {
         );
         CREATE INDEX IF NOT EXISTS idx_tombstones_table_record ON tombstones(table_name, record_id);
         CREATE INDEX IF NOT EXISTS idx_tombstones_deleted_at ON tombstones(deleted_at);
+
+        CREATE TABLE IF NOT EXISTS server_metadata (
+          key TEXT PRIMARY KEY,
+          value TEXT NOT NULL,
+          updated_at INTEGER NOT NULL
+        );
       `)
       .catch((err) => {
         schemaReadyPromise = null;
@@ -491,6 +504,39 @@ export async function getLatestWeightLog(
     return null;
   }
   return WeightLogEntrySchema.parse(JSON.parse(row.data));
+}
+
+export async function recordShortcutSyncTimestamp(
+  isoTimestamp: string = new Date().toISOString()
+): Promise<void> {
+  await ensureServerSchema();
+  const client = getLibsqlClient();
+  await client.execute({
+    sql: `INSERT INTO server_metadata (key, value, updated_at)
+          VALUES (?, ?, ?)
+          ON CONFLICT(key) DO UPDATE SET
+            value = excluded.value,
+            updated_at = excluded.updated_at`,
+    args: [SHORTCUT_SYNC_METADATA_KEY, isoTimestamp, Date.now()],
+  });
+}
+
+export async function getShortcutSyncStatus(): Promise<ShortcutSyncStatus> {
+  await ensureServerSchema();
+  const client = getLibsqlClient();
+  const res = await client.execute({
+    sql: 'SELECT value FROM server_metadata WHERE key = ? LIMIT 1',
+    args: [SHORTCUT_SYNC_METADATA_KEY],
+  });
+  const row = res.rows[0] as Record<string, unknown> | undefined;
+  const lastSyncedAt =
+    row && typeof row.value === 'string' && row.value.trim().length > 0
+      ? row.value.trim()
+      : null;
+  return {
+    connected: lastSyncedAt !== null,
+    lastSyncedAt,
+  };
 }
 
 export async function applyTableMutation(

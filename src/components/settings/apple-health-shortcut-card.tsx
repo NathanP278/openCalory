@@ -6,6 +6,7 @@ import {
   AlertTriangle,
   Check,
   CheckCircle2,
+  Clock,
   Copy,
   RefreshCw,
   Smartphone,
@@ -17,6 +18,8 @@ import { triggerHaptic } from '@/lib/motion';
 
 export function AppleHealthShortcutCard() {
   const [configured, setConfigured] = useState<boolean | null>(null);
+  const [connected, setConnected] = useState(false);
+  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
   const [isChecking, setIsChecking] = useState(false);
   const [copiedField, setCopiedField] = useState<'url' | 'header' | 'steps' | null>(
     null
@@ -53,13 +56,23 @@ export function AppleHealthShortcutCard() {
         headers: { 'Cache-Control': 'no-cache' },
       });
       if (res.ok) {
-        const data = (await res.json()) as { configured?: boolean };
+        const data = (await res.json()) as {
+          configured?: boolean;
+          connected?: boolean;
+          lastSyncedAt?: string | null;
+        };
         setConfigured(Boolean(data.configured));
+        setConnected(Boolean(data.connected));
+        setLastSyncedAt(data.lastSyncedAt ?? null);
       } else {
         setConfigured(false);
+        setConnected(false);
+        setLastSyncedAt(null);
       }
     } catch {
       setConfigured(false);
+      setConnected(false);
+      setLastSyncedAt(null);
     } finally {
       setIsChecking(false);
     }
@@ -154,10 +167,15 @@ export function AppleHealthShortcutCard() {
         <summary className="cursor-pointer select-none list-none flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
             <span className="font-semibold text-foreground">Setup Guide &amp; Endpoint Details</span>
-            {configured === true ? (
+            {configured === true && connected ? (
               <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[var(--macro-carbs)]">
                 <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" />
-                <span>Configured</span>
+                <span>Connected</span>
+              </span>
+            ) : configured === true ? (
+              <span className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground">
+                <Clock className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                <span>Awaiting Shortcut Setup</span>
               </span>
             ) : configured === false ? (
               <span className="inline-flex items-center gap-1 text-[11px] font-medium text-[var(--neutral-over)]">
@@ -177,6 +195,19 @@ export function AppleHealthShortcutCard() {
           <p className="text-[11px] text-[var(--neutral-over)]">
             Set <code className="font-mono text-[10px]">SHORTCUT_API_KEY</code> in your server environment variables to enable this endpoint.
           </p>
+        )}
+        {configured === true && !connected && (
+          <p className="text-[11px] text-muted-foreground">
+            Server API key is ready. Build and run your iOS Shortcut once to verify and mark this integration as <strong className="text-foreground font-medium">Connected</strong>.
+          </p>
+        )}
+        {configured === true && connected && lastSyncedAt && (
+          <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+            <span>Last Shortcut Sync</span>
+            <span className="font-mono text-[10px] text-foreground tabular-nums">
+              {new Date(lastSyncedAt).toLocaleString()}
+            </span>
+          </div>
         )}
 
         {/* Endpoint URL */}
