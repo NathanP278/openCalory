@@ -761,8 +761,48 @@ function selectCleanStapleCandidate(candidates: FoodItem[], query: string): Food
   return cleanMatch ?? candidates[0];
 }
 
+function applyStapleMicrosToItem<
+  T extends { name: string; microsPer100g?: Micronutrients },
+>(item: T, bestStaple: FoodItem | undefined): T & { microsPer100g?: Micronutrients } {
+  if (!bestStaple?.micronutrientsPerBasis) {
+    return item;
+  }
+
+  let scaleTo100g = 1;
+  if (bestStaple.basis === 'perServing') {
+    const grams = getPerServingWeightGrams(bestStaple);
+    if (!grams || grams <= 0) {
+      return item;
+    }
+    scaleTo100g = 100 / grams;
+  }
+
+  const stapleMicros = estimateMissingStapleMicros(bestStaple);
+  const mergedMicros: Micronutrients = { ...(item.microsPer100g ?? {}) };
+  let changed = false;
+  for (const key of TRACKED_MICRONUTRIENT_KEYS) {
+    const existingVal = mergedMicros[key];
+    const rawStapleVal = stapleMicros[key];
+    if (typeof existingVal !== 'number' && typeof rawStapleVal === 'number') {
+      mergedMicros[key] =
+        scaleTo100g === 1 ? rawStapleVal : round2(rawStapleVal * scaleTo100g);
+      changed = true;
+    }
+  }
+
+  if (!changed) {
+    return item;
+  }
+
+  return {
+    ...item,
+    microsPer100g: mergedMicros,
+  };
+}
+
 /**
- * Enriches meal items with missing micronutrient densities from the local USDA staples dataset.
+ * Enriches meal items with missing micronutrient densities from the local staples cache
+ * or (on the server) the SQLite FTS5 food catalog.
  * Never overwrites micronutrient keys already populated by the AI or user verification.
  */
 export async function enrichMealItemsWithStaples<
@@ -778,50 +818,42 @@ export async function enrichMealItemsWithStaples<
   }
 
   const staples = await loadStaples();
-  if (staples.length === 0) {
+  if (staples.length > 0) {
+    return items.map((item) => {
+      if (hasAllTrackedMicros(item.microsPer100g)) {
+        return item;
+      }
+
+      const candidates = filterStaples(staples, item.name, 8, { allowFuzzy: false });
+      const bestStaple = selectCleanStapleCandidate(candidates, item.name);
+      return applyStapleMicrosToItem(item, bestStaple);
+    });
+  }
+
+  if (typeof window !== 'undefined') {
     return items;
   }
 
-  return items.map((item) => {
-    if (hasAllTrackedMicros(item.microsPer100g)) {
-      return item;
-    }
+  let searchServerCatalogFn: typeof import('./server-catalog').searchServerCatalog;
+  try {
+    const serverCatalog = await import('./server-catalog');
+    searchServerCatalogFn = serverCatalog.searchServerCatalog;
+  } catch {
+    return items;
+  }
 
-    const candidates = filterStaples(staples, item.name, 8, { allowFuzzy: false });
-    const bestStaple = selectCleanStapleCandidate(candidates, item.name);
-    if (!bestStaple?.micronutrientsPerBasis) {
-      return item;
-    }
-
-    let scaleTo100g = 1;
-    if (bestStaple.basis === 'perServing') {
-      const grams = getPerServingWeightGrams(bestStaple);
-      if (!grams || grams <= 0) {
+  return Promise.all(
+    items.map(async (item) => {
+      if (hasAllTrackedMicros(item.microsPer100g) || !item.name?.trim()) {
         return item;
       }
-      scaleTo100g = 100 / grams;
-    }
-
-    const stapleMicros = estimateMissingStapleMicros(bestStaple);
-    const mergedMicros: Micronutrients = { ...(item.microsPer100g ?? {}) };
-    let changed = false;
-    for (const key of TRACKED_MICRONUTRIENT_KEYS) {
-      const existingVal = mergedMicros[key];
-      const rawStapleVal = stapleMicros[key];
-      if (typeof existingVal !== 'number' && typeof rawStapleVal === 'number') {
-        mergedMicros[key] =
-          scaleTo100g === 1 ? rawStapleVal : round2(rawStapleVal * scaleTo100g);
-        changed = true;
+      try {
+        const candidates = await searchServerCatalogFn(item.name, { limit: 8 });
+        const bestStaple = selectCleanStapleCandidate(candidates, item.name);
+        return applyStapleMicrosToItem(item, bestStaple);
+      } catch {
+        return item;
       }
-    }
-
-    if (!changed) {
-      return item;
-    }
-
-    return {
-      ...item,
-      microsPer100g: mergedMicros,
-    };
-  });
+    })
+  );
 }

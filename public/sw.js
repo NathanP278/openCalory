@@ -15,11 +15,10 @@ const PRECACHE_ASSETS = [
 ];
 
 const CACHE_FIRST_DATA_PATHS = new Set([
-  '/data/catalog-manifest.json',
   '/data/food-catalog.db.gz',
 ]);
 
-// Install: precache app shell and static staples dataset, immediately activate
+// Install: precache app shell and SQLite food catalog, immediately activate
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches
@@ -67,7 +66,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 2. Offline food catalog (/data/catalog-manifest.json & /data/food-catalog.db.gz): Cache-first
+  // 2. Offline food catalog binary (/data/food-catalog.db.gz): Cache-first
   if (CACHE_FIRST_DATA_PATHS.has(url.pathname)) {
     event.respondWith(
       caches.match(event.request).then((cachedResponse) => {

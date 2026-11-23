@@ -57,6 +57,8 @@ import type {
 } from '@/types/nutrition';
 
 const onlineQueryCache = new Map<string, FoodItem[]>();
+const EMPTY_LEGACY_FOODS_MAP = new Map<string, FoodItem>();
+const EMPTY_LEGACY_ALIAS_MAP = new Map<string, string>();
 
 /**
  * Clears in-memory online food query caches (intended for tests/reset).
@@ -242,10 +244,10 @@ function FoodSearchContent({ date, mealSlot, onClose }: FoodSearchContentProps) 
   const [historyLogs, setHistoryLogs] = useState<FoodLogEntry[]>([]);
   const [catalogResults, setCatalogResults] = useState<FoodItem[]>([]);
   const [catalogSettledQuery, setCatalogSettledQuery] = useState<string>('');
-  const [resolvedLegacyFoods, setResolvedLegacyFoods] = useState<Map<string, FoodItem>>(
-    () => new Map()
-  );
-  const [legacyAliasMap, setLegacyAliasMap] = useState<Map<string, string>>(
+  const [resolvedLegacyFoodsState, setResolvedLegacyFoodsState] = useState<
+    Map<string, FoodItem>
+  >(() => new Map());
+  const [legacyAliasMapState, setLegacyAliasMapState] = useState<Map<string, string>>(
     () => new Map()
   );
   const [onlineResults, setOnlineResults] = useState<FoodItem[]>(() => {
@@ -313,7 +315,7 @@ function FoodSearchContent({ date, mealSlot, onClose }: FoodSearchContentProps) 
   }, []);
 
   // Review Focus #5: Lazily resolve legacy foodIds (staple:*, usda:*, ph:*) in foodLogs & pinnedFoods
-  useEffect(() => {
+  const legacyCandidateIds = React.useMemo(() => {
     const candidateIds = new Set<string>();
     for (const log of historyLogs) {
       const id = (log.foodId || '').trim();
@@ -326,14 +328,21 @@ function FoodSearchContent({ date, mealSlot, onClose }: FoodSearchContentProps) 
         candidateIds.add(pin.refId.trim());
       }
     }
-    if (candidateIds.size === 0) {
-      setLegacyAliasMap(new Map());
-      setResolvedLegacyFoods(new Map());
+    return Array.from(candidateIds);
+  }, [historyLogs, pinnedFoods]);
+
+  const legacyAliasMap =
+    legacyCandidateIds.length === 0 ? EMPTY_LEGACY_ALIAS_MAP : legacyAliasMapState;
+  const resolvedLegacyFoods =
+    legacyCandidateIds.length === 0 ? EMPTY_LEGACY_FOODS_MAP : resolvedLegacyFoodsState;
+
+  useEffect(() => {
+    if (legacyCandidateIds.length === 0) {
       return;
     }
 
     let cancelled = false;
-    void resolveClientLegacyIds(Array.from(candidateIds))
+    void resolveClientLegacyIds(legacyCandidateIds)
       .then((resolved) => {
         if (cancelled || !isMountedRef.current) return;
         const nextAliasMap = new Map<string, string>();
@@ -344,8 +353,8 @@ function FoodSearchContent({ date, mealSlot, onClose }: FoodSearchContentProps) 
             nextResolvedFoods.set(canonicalFood.id, canonicalFood);
           }
         }
-        setLegacyAliasMap(nextAliasMap);
-        setResolvedLegacyFoods(nextResolvedFoods);
+        setLegacyAliasMapState(nextAliasMap);
+        setResolvedLegacyFoodsState(nextResolvedFoods);
       })
       .catch(() => {
         // Non-fatal: fallback to Dexie foodsCache or synthesized log entries
@@ -354,7 +363,7 @@ function FoodSearchContent({ date, mealSlot, onClose }: FoodSearchContentProps) 
     return () => {
       cancelled = true;
     };
-  }, [historyLogs, pinnedFoods, catalogSyncState.status]);
+  }, [legacyCandidateIds, catalogSyncState.status]);
 
   const refreshHistoryAndPins = async () => {
     try {
@@ -456,8 +465,6 @@ function FoodSearchContent({ date, mealSlot, onClose }: FoodSearchContentProps) 
     const trimmed = query.trim();
     const normKey = trimmed.toLowerCase();
     if (!trimmed) {
-      setCatalogResults([]);
-      setCatalogSettledQuery('');
       return;
     }
 
@@ -516,7 +523,15 @@ function FoodSearchContent({ date, mealSlot, onClose }: FoodSearchContentProps) 
     if (localMergedFoods.length >= 5) return;
     if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
 
-    void runOnlineSearch(trimmed, normKey);
+    let cancelled = false;
+    void Promise.resolve().then(() => {
+      if (!cancelled) {
+        void runOnlineSearch(trimmed, normKey);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [query, catalogSettledQuery, localMergedFoods.length, runOnlineSearch]);
 
   const foodsById = React.useMemo(() => {

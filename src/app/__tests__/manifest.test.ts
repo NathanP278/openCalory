@@ -85,7 +85,13 @@ describe('Task 13: Manifest, Service Worker & PwaRegister', () => {
       expect(sw).toMatch(/skipWaiting/);
       expect(sw).toMatch(/clients\.claim/);
 
-      // Routing strategies: verify cache-first branch covers catalog-manifest.json and food-catalog.db.gz
+      // Routing strategies: verify cache-first branch covers food-catalog.db.gz (not catalog-manifest.json)
+      const cacheFirstMatch = sw.match(/const\s+CACHE_FIRST_DATA_PATHS\s*=\s*new\s+Set\(\[([\s\S]*?)\]\)/);
+      expect(cacheFirstMatch).not.toBeNull();
+      const cacheFirstBlock = cacheFirstMatch![1];
+      expect(cacheFirstBlock).toContain("'/data/food-catalog.db.gz'");
+      expect(cacheFirstBlock).not.toContain("'/data/catalog-manifest.json'");
+
       const fetchBlock = sw.slice(sw.indexOf("addEventListener('fetch'"));
       expect(fetchBlock).toMatch(/\/api\//); // network-only for api
       expect(sw).toContain('/data/catalog-manifest.json');

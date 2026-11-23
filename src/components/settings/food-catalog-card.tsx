@@ -60,7 +60,6 @@ export function FoodCatalogCard({ className }: FoodCatalogCardProps) {
       setCatalogState(next);
     });
     initClientCatalog();
-    setCatalogState(getCatalogSyncState());
     return () => {
       unsubscribe();
     };
