@@ -250,17 +250,123 @@ export function parseNationalTableRows(
   return results;
 }
 
-function parseSimpleCsvToObjects(csvText: string): Record<string, unknown>[] {
-  const lines = csvText.split(/\r?\n/).filter((l) => l.trim().length > 0);
-  if (lines.length < 2) return [];
-  const delimiter = lines[0].includes(';') && !lines[0].includes(',') ? ';' : ',';
-  const headers = lines[0].split(delimiter).map((h) => h.replace(/^"|"$/g, '').trim());
+function detectDelimiter(headerLine: string): ',' | ';' | '\t' {
+  let inQuotes = false;
+  let commas = 0;
+  let semicolons = 0;
+  let tabs = 0;
+
+  for (let i = 0; i < headerLine.length; i++) {
+    const ch = headerLine[i];
+    if (ch === '"') {
+      if (inQuotes && headerLine[i + 1] === '"') {
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+    if (!inQuotes) {
+      if (ch === ',') commas++;
+      else if (ch === ';') semicolons++;
+      else if (ch === '\t') tabs++;
+    }
+  }
+
+  if (tabs > commas && tabs >= semicolons) return '\t';
+  if (semicolons > commas) return ';';
+  return ',';
+}
+
+/**
+ * RFC-4180 delimited parser supporting configurable delimiter (comma, semicolon, tab),
+ * quoted fields with embedded delimiters/newlines, escaped double-quotes (""), and UTF-8 BOM.
+ */
+export function parseRfc4180Delimited(
+  text: string,
+  delimiter?: ',' | ';' | '\t'
+): string[][] {
+  const clean = text.startsWith('\uFEFF') ? text.slice(1) : text;
+  if (!clean.trim()) return [];
+
+  const firstNewline = clean.search(/\r?\n/);
+  const headerSample = firstNewline === -1 ? clean : clean.slice(0, firstNewline);
+  const sep = delimiter ?? detectDelimiter(headerSample);
+
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let field = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < clean.length; i++) {
+    const ch = clean[i];
+
+    if (inQuotes) {
+      if (ch === '"') {
+        if (clean[i + 1] === '"') {
+          field += '"';
+          i++;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        field += ch;
+      }
+      continue;
+    }
+
+    if (ch === '"' && field.length === 0) {
+      inQuotes = true;
+      continue;
+    }
+
+    if (ch === sep) {
+      row.push(field);
+      field = '';
+      continue;
+    }
+
+    if (ch === '\r' || ch === '\n') {
+      if (ch === '\r' && clean[i + 1] === '\n') i++;
+      row.push(field);
+      if (row.some((c) => c.trim().length > 0)) {
+        rows.push(row);
+      }
+      row = [];
+      field = '';
+      continue;
+    }
+
+    field += ch;
+  }
+
+  if (field.length > 0 || row.length > 0) {
+    row.push(field);
+    if (row.some((c) => c.trim().length > 0)) {
+      rows.push(row);
+    }
+  }
+
+  return rows;
+}
+
+/**
+ * Parses a national-table CSV/TSV/semicolon-delimited text into row objects using RFC-4180 parsing.
+ */
+export function parseNationalTableCsv(
+  csvText: string,
+  delimiter?: ',' | ';' | '\t'
+): Record<string, unknown>[] {
+  const parsedRows = parseRfc4180Delimited(csvText, delimiter);
+  if (parsedRows.length < 2) return [];
+
+  const headers = parsedRows[0].map((h) => h.trim());
   const rows: Record<string, unknown>[] = [];
-  for (let i = 1; i < lines.length; i++) {
-    const vals = lines[i].split(delimiter).map((v) => v.replace(/^"|"$/g, '').trim());
+  for (let i = 1; i < parsedRows.length; i++) {
+    const vals = parsedRows[i];
     const obj: Record<string, unknown> = {};
     headers.forEach((h, idx) => {
-      obj[h] = vals[idx] ?? '';
+      if (h) obj[h] = (vals[idx] ?? '').trim();
     });
     rows.push(obj);
   }
@@ -308,7 +414,7 @@ export const nationalTablesAdapter: CatalogAdapter = {
               ? parsed.foods
               : [];
         } else {
-          rows = parseSimpleCsvToObjects(rawText);
+          rows = parseNationalTableCsv(rawText);
         }
         const items = parseNationalTableRows(def.id, rows);
         console.log(`[national-tables] Loaded ${items.length} foods from ${def.id} (${def.region})`);

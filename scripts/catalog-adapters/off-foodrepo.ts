@@ -128,6 +128,106 @@ function parseOffServing(servingSizeText: unknown): {
   return grams && grams > 0 ? { servingWeightGrams: grams } : {};
 }
 
+interface OffParseState {
+  tier: 'core' | 'expanded';
+  quotas: Record<string, number>;
+  regionCounts: Map<string, number>;
+  nextSeq: () => number;
+}
+
+function parseOffJsonlRecord(
+  rawLine: string,
+  state: OffParseState
+): CatalogFoodInput | null {
+  const line = rawLine.trim();
+  if (!line) return null;
+
+  let obj: Record<string, unknown>;
+  try {
+    obj = JSON.parse(line) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+
+  const rawName = String(obj.product_name || obj.product_name_en || '').trim();
+  if (!rawName) return null;
+
+  const region = detectOffRegion(obj.countries_tags);
+  if (state.tier === 'core') {
+    const cap = state.quotas[region] ?? state.quotas.GLOBAL ?? 500;
+    const current = state.regionCounts.get(region) ?? 0;
+    if (current >= cap) return null;
+  }
+
+  const nut = (obj.nutriments as Record<string, unknown>) || {};
+  const calories = round2(toNum(nut['energy-kcal_100g'] ?? nut['energy-kcal']));
+  const protein = round2(toNum(nut.proteins_100g));
+  const carbs = round2(toNum(nut.carbohydrates_100g));
+  const fat = round2(toNum(nut.fat_100g));
+  const fiber = round2(toNum(nut.fiber_100g));
+
+  const nutrientsPerBasis: MacroNutrients = { calories, protein, carbs, fat, fiber };
+  if (!passesMacroQualityGate(nutrientsPerBasis, 4)) return null;
+
+  const barcode = normalizeBarcode(
+    typeof obj.code === 'string' ? obj.code : String(obj.code ?? '')
+  );
+  const brandRaw = typeof obj.brands === 'string' ? obj.brands.split(',')[0].trim() : '';
+  const brand = brandRaw || undefined;
+  const cleanName = cleanFoodDisplayName(rawName, brand);
+  if (!cleanName) return null;
+
+  const categories = Array.isArray(obj.categories_tags) ? obj.categories_tags : [];
+  const firstCat =
+    typeof categories[0] === 'string'
+      ? categories[0].replace(/^[a-z]{2}:/, '').replace(/-/g, ' ')
+      : undefined;
+
+  const aliases = generateFoodAliases(rawName, cleanName);
+  const { servingWeightGrams, servingOptions: parsedServing } = parseOffServing(obj.serving_size);
+  const servingOptions = enrichServingOptions({
+    name: cleanName,
+    category: firstCat,
+    basis: 'per100g',
+    existingOptions: parsedServing,
+    servingWeightGrams,
+  });
+
+  const micros: Micronutrients = {};
+  const sodiumG = toNum(nut.sodium_100g);
+  if (sodiumG > 0) micros.sodiumMg = round2(sodiumG * 1000);
+  const sugars = toNum(nut.sugars_100g);
+  if (sugars > 0) micros.sugarG = round2(sugars);
+  const satFat = toNum(nut['saturated-fat_100g']);
+  if (satFat > 0) micros.saturatedFatG = round2(satFat);
+
+  const idSuffix = barcode || `${region.toLowerCase()}-${state.nextSeq()}`;
+  const record: CatalogFoodInput = {
+    id: `off:${idSuffix}`,
+    barcode,
+    source: 'off',
+    sourceProvider: 'openfoodfacts',
+    accuracyTier: 4,
+    region,
+    ...(firstCat ? { category: firstCat } : {}),
+    name: cleanName,
+    ...(brand ? { brand } : {}),
+    ...(aliases.length > 0 ? { aliases } : {}),
+    basis: 'per100g',
+    servingSize: 100,
+    servingUnit: 'g',
+    ...(servingWeightGrams ? { servingWeightGrams } : {}),
+    servingOptions,
+    nutrientsPerBasis,
+    micronutrientsPerBasis: micros,
+    updatedAt: FIXED_TIMESTAMP,
+  };
+
+  record.searchRank = computeSearchRank(record);
+  state.regionCounts.set(region, (state.regionCounts.get(region) ?? 0) + 1);
+  return record;
+}
+
 /**
  * Pure parser for Open Food Facts JSONL lines enforcing `passesMacroQualityGate(..., 4)`
  * and explicit non-US regional quotas in `core` mode.
@@ -136,94 +236,18 @@ export function parseOffJsonlLines(
   lines: Iterable<string>,
   options?: { tier?: 'core' | 'expanded'; regionQuotas?: Record<string, number> }
 ): CatalogFoodInput[] {
-  const tier = options?.tier ?? 'core';
-  const quotas = options?.regionQuotas ?? CORE_OFF_REGION_QUOTAS;
-  const regionCounts = new Map<string, number>();
+  let seq = 0;
+  const state: OffParseState = {
+    tier: options?.tier ?? 'core',
+    quotas: options?.regionQuotas ?? CORE_OFF_REGION_QUOTAS,
+    regionCounts: new Map<string, number>(),
+    nextSeq: () => ++seq,
+  };
   const results: CatalogFoodInput[] = [];
 
   for (const rawLine of lines) {
-    const line = rawLine.trim();
-    if (!line) continue;
-
-    let obj: Record<string, unknown>;
-    try {
-      obj = JSON.parse(line) as Record<string, unknown>;
-    } catch {
-      continue;
-    }
-
-    const rawName = String(obj.product_name || obj.product_name_en || '').trim();
-    if (!rawName) continue;
-
-    const region = detectOffRegion(obj.countries_tags);
-    if (tier === 'core') {
-      const cap = quotas[region] ?? quotas.GLOBAL ?? 500;
-      const current = regionCounts.get(region) ?? 0;
-      if (current >= cap) continue;
-    }
-
-    const nut = (obj.nutriments as Record<string, unknown>) || {};
-    const calories = round2(toNum(nut['energy-kcal_100g'] ?? nut['energy-kcal']));
-    const protein = round2(toNum(nut.proteins_100g));
-    const carbs = round2(toNum(nut.carbohydrates_100g));
-    const fat = round2(toNum(nut.fat_100g));
-    const fiber = round2(toNum(nut.fiber_100g));
-
-    const nutrientsPerBasis: MacroNutrients = { calories, protein, carbs, fat, fiber };
-    if (!passesMacroQualityGate(nutrientsPerBasis, 4)) continue;
-
-    const barcode = normalizeBarcode(typeof obj.code === 'string' ? obj.code : String(obj.code ?? ''));
-    const brandRaw = typeof obj.brands === 'string' ? obj.brands.split(',')[0].trim() : '';
-    const brand = brandRaw || undefined;
-    const cleanName = cleanFoodDisplayName(rawName, brand);
-    if (!cleanName) continue;
-
-    const categories = Array.isArray(obj.categories_tags) ? obj.categories_tags : [];
-    const firstCat = typeof categories[0] === 'string' ? categories[0].replace(/^[a-z]{2}:/, '').replace(/-/g, ' ') : undefined;
-
-    const aliases = generateFoodAliases(rawName, cleanName);
-    const { servingWeightGrams, servingOptions: parsedServing } = parseOffServing(obj.serving_size);
-    const servingOptions = enrichServingOptions({
-      name: cleanName,
-      category: firstCat,
-      basis: 'per100g',
-      existingOptions: parsedServing,
-      servingWeightGrams,
-    });
-
-    const micros: Micronutrients = {};
-    const sodiumG = toNum(nut.sodium_100g);
-    if (sodiumG > 0) micros.sodiumMg = round2(sodiumG * 1000);
-    const sugars = toNum(nut.sugars_100g);
-    if (sugars > 0) micros.sugarG = round2(sugars);
-    const satFat = toNum(nut['saturated-fat_100g']);
-    if (satFat > 0) micros.saturatedFatG = round2(satFat);
-
-    const idSuffix = barcode || `${region.toLowerCase()}-${results.length + 1}`;
-    const record: CatalogFoodInput = {
-      id: `off:${idSuffix}`,
-      barcode,
-      source: 'off',
-      sourceProvider: 'openfoodfacts',
-      accuracyTier: 4,
-      region,
-      ...(firstCat ? { category: firstCat } : {}),
-      name: cleanName,
-      ...(brand ? { brand } : {}),
-      ...(aliases.length > 0 ? { aliases } : {}),
-      basis: 'per100g',
-      servingSize: 100,
-      servingUnit: 'g',
-      ...(servingWeightGrams ? { servingWeightGrams } : {}),
-      servingOptions,
-      nutrientsPerBasis,
-      micronutrientsPerBasis: micros,
-      updatedAt: FIXED_TIMESTAMP,
-    };
-
-    record.searchRank = computeSearchRank(record);
-    results.push(record);
-    regionCounts.set(region, (regionCounts.get(region) ?? 0) + 1);
+    const record = parseOffJsonlRecord(rawLine, state);
+    if (record) results.push(record);
   }
 
   return results;
@@ -317,17 +341,24 @@ export function parseFoodRepoJson(jsonText: string): CatalogFoodInput[] {
   return results;
 }
 
-async function streamOffJsonlFile(
+export async function streamOffJsonlFile(
   filePath: string,
-  tier: 'core' | 'expanded'
+  tier: 'core' | 'expanded',
+  regionQuotas?: Record<string, number>
 ): Promise<CatalogFoodInput[]> {
   const rl = readline.createInterface({
     input: fs.createReadStream(filePath, { encoding: 'utf8' }),
     crlfDelay: Infinity,
   });
 
-  const quotas = CORE_OFF_REGION_QUOTAS;
-  const regionCounts = new Map<string, number>();
+  const quotas = regionQuotas ?? CORE_OFF_REGION_QUOTAS;
+  let seq = 0;
+  const state: OffParseState = {
+    tier,
+    quotas,
+    regionCounts: new Map<string, number>(),
+    nextSeq: () => ++seq,
+  };
   const results: CatalogFoodInput[] = [];
   const maxCoreTotal = Object.values(quotas).reduce((a, b) => a + b, 0);
 
@@ -336,16 +367,9 @@ async function streamOffJsonlFile(
       rl.close();
       break;
     }
-    const parsed = parseOffJsonlLines([line], {
-      tier,
-      regionQuotas: Object.fromEntries(
-        Object.entries(quotas).map(([k, v]) => [k, Math.max(0, v - (regionCounts.get(k) ?? 0))])
-      ),
-    });
-    for (const item of parsed) {
-      results.push(item);
-      const r = item.region || 'GLOBAL';
-      regionCounts.set(r, (regionCounts.get(r) ?? 0) + 1);
+    const record = parseOffJsonlRecord(line, state);
+    if (record) {
+      results.push(record);
     }
   }
 

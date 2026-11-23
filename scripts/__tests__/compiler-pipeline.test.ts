@@ -13,7 +13,10 @@ import {
 } from '../catalog-adapters/types';
 import { parseUsdaFoodRecord } from '../catalog-adapters/usda';
 import { parseOpenNutritionTsv } from '../catalog-adapters/opennutrition';
-import { parseNationalTableRows } from '../catalog-adapters/national-tables';
+import {
+  parseNationalTableCsv,
+  parseNationalTableRows,
+} from '../catalog-adapters/national-tables';
 import {
   parseMenuStatCsv,
   parseOpenNoshJson,
@@ -21,6 +24,7 @@ import {
 import {
   parseOffJsonlLines,
   parseFoodRepoJson,
+  streamOffJsonlFile,
 } from '../catalog-adapters/off-foodrepo';
 import { loadCuratedFromFiles } from '../catalog-adapters/curated';
 import { compileCatalogToSqlite } from '../build-food-catalog';
@@ -202,6 +206,70 @@ describe('Compiler Pipeline — Adapter Pure Row Parsers', () => {
     expect(jpItems[0].name).toContain('Rice');
     expect(jpItems[0].aliases?.some((a) => a.toLowerCase().includes('gohan'))).toBe(true);
     expect(jpItems[0].servingOptions?.some((o) => o.unit === 'cup')).toBe(true);
+  });
+
+  it('parses national-table CSV with quoted comma-containing food names without shifting columns', () => {
+    const csv = [
+      'id,name,category,calories,protein,carbs,fat,fiber,sodium_mg',
+      '01088,"Rice, white, cooked","Cereals, grains",156,2.5,37.1,0.3,0.3,1',
+      '01089,"Chicken, breast, ""skinless"", raw",Poultry,120,22.5,0,2.6,0,45',
+    ].join('\n');
+
+    const rows = parseNationalTableCsv(csv);
+    expect(rows).toHaveLength(2);
+    expect(rows[0].name).toBe('Rice, white, cooked');
+    expect(rows[0].calories).toBe('156');
+    expect(rows[0].protein).toBe('2.5');
+    expect(rows[0].carbs).toBe('37.1');
+
+    const items = parseNationalTableRows('mext', rows);
+    expect(items).toHaveLength(2);
+    expect(items[0].nutrientsPerBasis).toEqual({
+      calories: 156,
+      protein: 2.5,
+      carbs: 37.1,
+      fat: 0.3,
+      fiber: 0.3,
+    });
+    expect(items[0].micronutrientsPerBasis.sodiumMg).toBe(1);
+    expect(items[1].nutrientsPerBasis.protein).toBe(22.5);
+    expect(items[1].micronutrientsPerBasis.sodiumMg).toBe(45);
+  });
+
+  it('streams multiple barcode-less OFF JSONL records in the same region with unique IDs', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'macroai-off-stream-test-'));
+    try {
+      const jsonlPath = path.join(tmpDir, 'off-sample.jsonl');
+      const lines = [
+        JSON.stringify({
+          code: '',
+          product_name: 'Taho Sweet Silken Tofu',
+          countries_tags: ['en:philippines'],
+          nutriments: { 'energy-kcal_100g': 90, proteins_100g: 4.5, carbohydrates_100g: 15, fat_100g: 1.5, fiber_100g: 0.5 },
+        }),
+        JSON.stringify({
+          code: '',
+          product_name: 'Pandesal Bread Roll',
+          countries_tags: ['en:philippines'],
+          nutriments: { 'energy-kcal_100g': 290, proteins_100g: 9, carbohydrates_100g: 54, fat_100g: 4, fiber_100g: 2 },
+        }),
+        JSON.stringify({
+          code: '',
+          product_name: 'Ensaymada Sweet Bun',
+          countries_tags: ['en:philippines'],
+          nutriments: { 'energy-kcal_100g': 380, proteins_100g: 8, carbohydrates_100g: 50, fat_100g: 16, fiber_100g: 1.5 },
+        }),
+      ];
+      fs.writeFileSync(jsonlPath, `${lines.join('\n')}\n`, 'utf8');
+
+      const streamed = await streamOffJsonlFile(jsonlPath, 'core', { PH: 2 });
+      expect(streamed).toHaveLength(2);
+      const ids = streamed.map((i) => i.id);
+      expect(new Set(ids).size).toBe(2);
+      expect(ids).toEqual(['off:ph-1', 'off:ph-2']);
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
   });
 
   it('parses MenuStat CSV and OpenNosh JSON fixtures', () => {
