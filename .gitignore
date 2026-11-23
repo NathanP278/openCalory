@@ -46,7 +46,9 @@ opencalory.db-journal
 opencalory.db-wal
 opencalory.db-shm
 macroai.db*
-/data/
+/data/*
+!/data/curated/
+/data/catalog/
 
 # AI agents & assistant artifacts
 AGENTS.md

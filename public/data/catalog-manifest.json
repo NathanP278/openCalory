@@ -1,0 +1,10 @@
+{
+  "version": "2026.11.23",
+  "tier": "core",
+  "sha256": "3700c2985f65135a2d7ecf37709a131901e7b1e91ff76296e180086312c449ba",
+  "builtAt": "2026-11-23T14:39:36.389Z",
+  "foodCount": 10598,
+  "gzipBytes": 2099509,
+  "rawBytes": 11587584,
+  "license": "ODbL-1.0"
+}
