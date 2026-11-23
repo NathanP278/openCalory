@@ -35,16 +35,67 @@ const COUNTABLE_UNIT_FORMS: Record<string, [string, string]> = {
   bars: ['bar', 'bars'],
   order: ['order', 'orders'],
   orders: ['order', 'orders'],
+  fillet: ['fillet', 'fillets'],
+  fillets: ['fillet', 'fillets'],
+  breast: ['breast', 'breasts'],
+  breasts: ['breast', 'breasts'],
+  thigh: ['thigh', 'thighs'],
+  thighs: ['thigh', 'thighs'],
+  link: ['link', 'links'],
+  links: ['link', 'links'],
+  patty: ['patty', 'patties'],
+  patties: ['patty', 'patties'],
+  clove: ['clove', 'cloves'],
+  cloves: ['clove', 'cloves'],
+  stalk: ['stalk', 'stalks'],
+  stalks: ['stalk', 'stalks'],
+  leaf: ['leaf', 'leaves'],
+  leaves: ['leaf', 'leaves'],
+  bunch: ['bunch', 'bunches'],
+  bunches: ['bunch', 'bunches'],
+  head: ['head', 'heads'],
+  heads: ['head', 'heads'],
+  strip: ['strip', 'strips'],
+  strips: ['strip', 'strips'],
+  wedge: ['wedge', 'wedges'],
+  wedges: ['wedge', 'wedges'],
+  sheet: ['sheet', 'sheets'],
+  sheets: ['sheet', 'sheets'],
+  container: ['container', 'containers'],
+  containers: ['container', 'containers'],
+  jar: ['jar', 'jars'],
+  jars: ['jar', 'jars'],
+  box: ['box', 'boxes'],
+  boxes: ['box', 'boxes'],
+  bag: ['bag', 'bags'],
+  bags: ['bag', 'bags'],
+  tub: ['tub', 'tubs'],
+  tubs: ['tub', 'tubs'],
+  mug: ['mug', 'mugs'],
+  mugs: ['mug', 'mugs'],
+  glass: ['glass', 'glasses'],
+  glasses: ['glass', 'glasses'],
+  small: ['small', 'small'],
+  medium: ['medium', 'medium'],
+  large: ['large', 'large'],
+  'extra large': ['extra large', 'extra large'],
 };
 
 /**
  * Formats a portion unit with singular/plural agreement (e.g., 1 pc vs 2 pcs).
- * Keeps metric units (g, ml, tbsp, tsp) invariant.
+ * Keeps metric, imperial, and spoon units (g, ml, oz, fl oz, tbsp, tsp) invariant.
  */
 export function formatPortionUnit(amount: number, unit: string): string {
   const trimmed = (unit || '').trim() || 'g';
   const lower = trimmed.toLowerCase();
-  if (lower === 'g' || lower === 'ml' || lower === 'tbsp' || lower === 'tsp') {
+  if (
+    lower === 'g' ||
+    lower === 'ml' ||
+    lower === 'oz' ||
+    lower === 'fl oz' ||
+    lower === 'tbsp' ||
+    lower === 'tsp'
+  ) {
     return lower;
   }
 
@@ -91,12 +142,50 @@ const HOUSEHOLD_UNIT_ALIASES: Record<string, string> = {
   bars: 'bar',
   order: 'order',
   orders: 'order',
+  fillet: 'fillet',
+  fillets: 'fillet',
+  breast: 'breast',
+  breasts: 'breast',
+  thigh: 'thigh',
+  thighs: 'thigh',
+  link: 'link',
+  links: 'link',
+  patty: 'patty',
+  patties: 'patty',
+  clove: 'clove',
+  cloves: 'clove',
+  stalk: 'stalk',
+  stalks: 'stalk',
+  leaf: 'leaf',
+  leaves: 'leaf',
+  bunch: 'bunch',
+  bunches: 'bunch',
+  head: 'head',
+  heads: 'head',
+  strip: 'strip',
+  strips: 'strip',
+  wedge: 'wedge',
+  wedges: 'wedge',
+  sheet: 'sheet',
+  sheets: 'sheet',
+  container: 'container',
+  containers: 'container',
+  jar: 'jar',
+  jars: 'jar',
+  box: 'box',
+  boxes: 'box',
+  bag: 'bag',
+  bags: 'bag',
+  tub: 'tub',
+  tubs: 'tub',
+  mug: 'mug',
+  mugs: 'mug',
+  glass: 'glass',
+  glasses: 'glass',
   sandwich: 'pc',
   sandwiches: 'pc',
   burger: 'pc',
   burgers: 'pc',
-  patty: 'pc',
-  patties: 'pc',
   muffin: 'pc',
   muffins: 'pc',
   egg: 'pc',
@@ -124,11 +213,82 @@ const HOUSEHOLD_UNIT_ALIASES: Record<string, string> = {
   tsp: 'tsp',
   teaspoon: 'tsp',
   teaspoons: 'tsp',
+  oz: 'oz',
+  ounce: 'oz',
+  ounces: 'oz',
+  'fl oz': 'fl oz',
+  'fl. oz': 'fl oz',
+  'fl. oz.': 'fl oz',
+  floz: 'fl oz',
+  'fluid ounce': 'fl oz',
+  'fluid ounces': 'fl oz',
+  small: 'small',
+  sm: 'small',
+  medium: 'medium',
+  med: 'medium',
+  large: 'large',
+  lg: 'large',
+  lrg: 'large',
+  'extra large': 'extra large',
+  'x-large': 'extra large',
+  xlarge: 'extra large',
+  xl: 'extra large',
+  jumbo: 'extra large',
 };
 
+function parseLeadingCount(raw: string): { count: number; rest: string } | null {
+  const fracMatch = raw.match(/^(\d+)\s*\/\s*(\d+)\s+(.+)$/);
+  if (fracMatch) {
+    const num = Number(fracMatch[1]);
+    const den = Number(fracMatch[2]);
+    if (Number.isFinite(num) && Number.isFinite(den) && num > 0 && den > 0) {
+      return { count: num / den, rest: fracMatch[3].trim() };
+    }
+  }
+
+  const numMatch = raw.match(/^(\d+(?:\.\d+)?)\s*(.+)$/);
+  if (numMatch) {
+    const count = Number(numMatch[1]);
+    if (Number.isFinite(count) && count > 0) {
+      return { count, rest: numMatch[2].trim() };
+    }
+  }
+
+  return null;
+}
+
+function lookupHouseholdUnit(text: string): string | null {
+  const tokens = text
+    .toLowerCase()
+    .replace(/[^a-z.\-\s]/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (tokens.length === 0) return null;
+
+  if (tokens.length >= 2) {
+    const twoWord = `${tokens[0]} ${tokens[1]}`;
+    if (HOUSEHOLD_UNIT_ALIASES[twoWord]) {
+      return HOUSEHOLD_UNIT_ALIASES[twoWord];
+    }
+    const twoWordNoDots = twoWord.replace(/\./g, '');
+    if (HOUSEHOLD_UNIT_ALIASES[twoWordNoDots]) {
+      return HOUSEHOLD_UNIT_ALIASES[twoWordNoDots];
+    }
+  }
+
+  const first = tokens[0];
+  if (HOUSEHOLD_UNIT_ALIASES[first]) {
+    return HOUSEHOLD_UNIT_ALIASES[first];
+  }
+  const firstNoDots = first.replace(/\./g, '');
+  return HOUSEHOLD_UNIT_ALIASES[firstNoDots] ?? null;
+}
+
 /**
- * Parses a household serving string (e.g., "1 SANDWICH", "2 slices (50g)", "1 pack")
- * into a positive count and canonical unit string, or returns null when uncountable/metric.
+ * Parses a household serving string (e.g., "1 SANDWICH", "2 slices (50g)", "1 pack",
+ * "1 oz", "8 fl oz", "1 extra large") into a positive count and canonical unit string,
+ * or returns null when uncountable/metric.
  */
 export function parseHouseholdServingText(
   text: string
@@ -141,19 +301,13 @@ export function parseHouseholdServingText(
     .trim();
   if (!cleaned) return null;
 
-  const match = cleaned.match(/^(\d+(?:\.\d+)?)\s*([a-zA-Z]+)/);
-  if (match) {
-    const count = Number(match[1]);
-    const unitKey = match[2].toLowerCase();
-    const mapped = HOUSEHOLD_UNIT_ALIASES[unitKey];
-    if (mapped && Number.isFinite(count) && count > 0) {
-      return { count, unit: mapped };
-    }
-    return null;
+  const leading = parseLeadingCount(cleaned);
+  if (leading) {
+    const mapped = lookupHouseholdUnit(leading.rest);
+    return mapped ? { count: leading.count, unit: mapped } : null;
   }
 
-  const singleWord = cleaned.toLowerCase().split(/\s+/)[0];
-  const mappedSingle = HOUSEHOLD_UNIT_ALIASES[singleWord];
+  const mappedSingle = lookupHouseholdUnit(cleaned);
   return mappedSingle ? { count: 1, unit: mappedSingle } : null;
 }
 
@@ -229,9 +383,20 @@ export function getServingOptionsForFood(food: FoodItem): FoodServingOption[] {
   ];
 }
 
+function resolveOptionGrams(option: FoodServingOption): number {
+  const unitLower = (option.unit || '').trim().toLowerCase();
+  if (unitLower === 'g' || unitLower === 'ml') return 1;
+  if (typeof option.grams === 'number' && Number.isFinite(option.grams) && option.grams > 0) {
+    return option.grams;
+  }
+  if (unitLower === 'oz') return 28.35;
+  if (unitLower === 'fl oz') return 29.57;
+  return 0;
+}
+
 /**
  * Scales food nutrients based on the selected FoodServingOption and entered amount.
- * Handles conversions between piece/household servings and grams/ml cleanly.
+ * Handles conversions between piece/household/imperial/size-qualifier servings and grams/ml cleanly.
  */
 export function scaleFoodByOption(
   food: FoodItem,
@@ -263,9 +428,11 @@ export function scaleFoodByOption(
     return { ...res, effectiveGrams };
   }
 
+  const resolvedGrams = resolveOptionGrams(option);
+
   if (food.basis === 'per100g' || food.basis === 'per100ml') {
     const isMetric = option.unit === 'g' || option.unit === 'ml';
-    const gramsPerUnit = isMetric ? 1 : option.grams > 0 ? option.grams : 100;
+    const gramsPerUnit = isMetric ? 1 : resolvedGrams > 0 ? resolvedGrams : 100;
     const effectiveGrams =
       Math.round((safeAmount * gramsPerUnit + Number.EPSILON) * 100) / 100;
     const res = scaleNutrition(
@@ -298,9 +465,9 @@ export function scaleFoodByOption(
     return { ...res, effectiveGrams: safeAmount };
   }
 
-  if (option.grams > 0 && baseWeightGrams > 0 && option.unit !== food.servingUnit) {
+  if (resolvedGrams > 0 && baseWeightGrams > 0 && option.unit !== food.servingUnit) {
     const effectiveGrams =
-      Math.round((safeAmount * option.grams + Number.EPSILON) * 100) / 100;
+      Math.round((safeAmount * resolvedGrams + Number.EPSILON) * 100) / 100;
     const servingMultiplier = effectiveGrams / baseWeightGrams;
     const res = scaleNutrition(
       food.nutrientsPerBasis,
@@ -320,7 +487,7 @@ export function scaleFoodByOption(
     servingMultiplier,
     baseServingSize
   );
-  const unitGrams = option.grams > 0 ? option.grams : baseWeightGrams;
+  const unitGrams = resolvedGrams > 0 ? resolvedGrams : baseWeightGrams;
   const effectiveGrams =
     unitGrams > 0
       ? Math.round((servingMultiplier * unitGrams + Number.EPSILON) * 100) / 100
