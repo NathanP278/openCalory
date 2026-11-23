@@ -405,7 +405,8 @@ async function executeCandidateCompletion(
   candidate: AiCandidate,
   config: ServerAiConfig,
   messages: unknown[],
-  options?: CallVisionOptions
+  options?: CallVisionOptions,
+  allowTransientRetry: boolean = config.candidates.length === 1
 ): Promise<string> {
   const timeoutMs = options?.timeoutMs ?? 45000;
   const headers: Record<string, string> = {
@@ -415,7 +416,6 @@ async function executeCandidateCompletion(
   };
 
   const modelFormatKey = `${endpoint}|${candidate.model}`;
-  const isSingleCandidate = config.candidates.length === 1;
 
   const executeFetch = async (useJsonFormat: boolean) => {
     const payload: Record<string, unknown> = {
@@ -444,9 +444,9 @@ async function executeCandidateCompletion(
     let attempt = 0;
     while (true) {
       const response = await executeFetch(useJsonFormat);
-      // Only retry inline on single-candidate setups; multi-candidate setups fall back to the next candidate immediately
+      // Retry inline on single-candidate setups or on the last remaining fallback candidate
       if (
-        isSingleCandidate &&
+        allowTransientRetry &&
         !response.ok &&
         TRANSIENT_RETRY_STATUSES.has(response.status) &&
         attempt < MAX_TRANSIENT_RETRIES &&
@@ -544,14 +544,28 @@ export async function callVisionChatCompletionWithMeta(
     }
   }
 
-  let lastError: AiServiceError | null = null;
+  const uniqueOrdered: AiCandidate[] = [];
   for (const candidate of orderedToTry) {
     const cKey = getCandidateHealthKey(endpoint, candidate);
     if (triedKeys.has(cKey)) continue;
     triedKeys.add(cKey);
+    uniqueOrdered.push(candidate);
+  }
+
+  let lastError: AiServiceError | null = null;
+  for (let i = 0; i < uniqueOrdered.length; i++) {
+    const candidate = uniqueOrdered[i];
+    const isLastCandidate = i === uniqueOrdered.length - 1;
 
     try {
-      const content = await executeCandidateCompletion(endpoint, candidate, config, messages, options);
+      const content = await executeCandidateCompletion(
+        endpoint,
+        candidate,
+        config,
+        messages,
+        options,
+        isLastCandidate
+      );
       setCandidateHealth(endpoint, candidate, true);
       return {
         content,

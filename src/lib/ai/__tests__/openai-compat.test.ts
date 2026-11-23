@@ -169,6 +169,89 @@ describe('Task 9: AI Schemas & JSON Parser', () => {
     });
     expect(() => parseAiJsonResponse(zeroServing, AiLabelOcrResponseSchema)).toThrow();
   });
+
+  it('normalizes bare top-level JSON arrays and flattened micros in AiMealScanResponseSchema', () => {
+    const bareArrayRaw = JSON.stringify([
+      {
+        name: 'Brewed Americano Coffee',
+        grams: 240,
+        per100g: {
+          calories: 2,
+          protein: 0.1,
+          carbs: 0,
+          fat: 0,
+          fiber: 0,
+          caffeineMg: 40,
+        },
+      },
+      {
+        name: "McDonald's Vanilla Soft Serve Ice Cream",
+        grams: 170,
+        per100g: {
+          calories: 169,
+          protein: 3.5,
+          carbs: 26.5,
+          fat: 5.3,
+          fiber: 0,
+          sugarG: 22.4,
+          addedSugarG: 20,
+          saturatedFatG: 3.5,
+          cholesterolMg: 20,
+        },
+      },
+    ]);
+
+    const parsed = parseAiJsonResponse(bareArrayRaw, AiMealScanResponseSchema);
+    expect(parsed.items).toHaveLength(2);
+    expect(parsed.items[0].name).toBe('Brewed Americano Coffee');
+    expect(parsed.items[0].microsPer100g?.caffeineMg).toBe(40);
+    expect(parsed.items[1].microsPer100g?.sugarG).toBe(22.4);
+    expect(parsed.items[1].microsPer100g?.addedSugarG).toBe(20);
+    expect(parsed.items[1].microsPer100g?.saturatedFatG).toBe(3.5);
+    expect(parsed.items[1].microsPer100g?.cholesterolMg).toBe(20);
+  });
+
+  it('normalizes null name/brand, unit casing/aliases, numeric strings, and array wrappers in AiLabelOcrResponseSchema', () => {
+    const labelWithNullsAndCasing = JSON.stringify({
+      name: null,
+      brand: null,
+      servingSize: '250',
+      servingUnit: 'mL',
+      calories: '120',
+      protein: null,
+      carbs: 30,
+      fat: null,
+      sugarG: '28',
+      sodiumMg: 45,
+    });
+
+    const parsed = parseAiJsonResponse(labelWithNullsAndCasing, AiLabelOcrResponseSchema);
+    expect(parsed.name).toBeUndefined();
+    expect(parsed.brand).toBeUndefined();
+    expect(parsed.servingSize).toBe(250);
+    expect(parsed.servingUnit).toBe('ml');
+    expect(parsed.calories).toBe(120);
+    expect(parsed.protein).toBe(0);
+    expect(parsed.carbs).toBe(30);
+    expect(parsed.fat).toBe(0);
+    expect(parsed.sugarG).toBe(28);
+
+    const wrappedInArray = JSON.stringify([
+      {
+        name: 'Oat Cereal',
+        brand: 'Harvest',
+        servingSize: 45,
+        servingUnit: 'grams',
+        calories: 180,
+        protein: 6,
+        carbs: 33,
+        fat: 3.5,
+      },
+    ]);
+    const unwrapped = parseAiJsonResponse(wrappedInArray, AiLabelOcrResponseSchema);
+    expect(unwrapped.name).toBe('Oat Cereal');
+    expect(unwrapped.servingUnit).toBe('g');
+  });
 });
 
 describe('Task 9: OpenAI-Compatible Client Helper', () => {

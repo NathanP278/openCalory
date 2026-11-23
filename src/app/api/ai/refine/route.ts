@@ -5,6 +5,8 @@ import { enrichMealItemsWithStaples } from '@/lib/foods/staples-search';
 import { NO_STORE_HEADERS, requireSyncAuth } from '@/lib/auth/sync-auth';
 import type { Micronutrients } from '@/types/nutrition';
 
+export const maxDuration = 60;
+
 export async function POST(request: Request) {
   const authError = requireSyncAuth(request);
   if (authError) return authError;

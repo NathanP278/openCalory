@@ -4,6 +4,8 @@ import { parseAiJsonResponse, AiMealScanResponseSchema } from '@/lib/ai/schemas'
 import { enrichMealItemsWithStaples } from '@/lib/foods/staples-search';
 import { NO_STORE_HEADERS, requireSyncAuth } from '@/lib/auth/sync-auth';
 
+export const maxDuration = 60;
+
 export async function POST(request: Request) {
   const authError = requireSyncAuth(request);
   if (authError) return authError;
@@ -70,7 +72,7 @@ export async function POST(request: Request) {
       : '',
     'Per component provide: name, grams (>0), per100g (calories, protein, carbs, fat, fiber in g), and optional microsPer100g (sodiumMg, potassiumMg, calciumMg, ironMg, magnesiumMg, zincMg, vitaminAMcg, vitaminCMg, vitaminDMcg, vitaminB6Mg, vitaminB12Mcg, folateMcg, sugarG, addedSugarG, saturatedFatG, cholesterolMg, caffeineMg, alcoholG per 100g).',
     'Estimate non-zero extended nutrients (sugarG, addedSugarG, saturatedFatG, cholesterolMg, caffeineMg, alcoholG) and core micronutrients in microsPer100g; to minimize latency, omit microsPer100g keys equal to 0 (server backfills USDA micronutrients for standard whole foods).',
-    'Return ONLY compact JSON matching this schema:',
+    'Return ONLY a compact JSON object with a top-level "items" array (NOT a bare array) matching this schema:',
     '{"items":[{"name":"Ingredient Name","grams":150,"per100g":{"calories":165,"protein":31,"carbs":0,"fat":3.6,"fiber":0}}]}',
   ]
     .filter(Boolean)

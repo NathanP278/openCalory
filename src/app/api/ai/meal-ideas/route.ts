@@ -12,6 +12,8 @@ import {
 import { enrichMealItemsWithStaples } from '@/lib/foods/staples-search';
 import { NO_STORE_HEADERS, requireSyncAuth } from '@/lib/auth/sync-auth';
 
+export const maxDuration = 60;
+
 function isFiniteNumber(val: unknown): val is number {
   return typeof val === 'number' && Number.isFinite(val);
 }

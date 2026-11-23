@@ -1,23 +1,119 @@
 import { z } from 'zod';
 
-const optionalNonNegativeNumber = z
-  .number()
-  .nonnegative()
-  .nullable()
-  .optional()
-  .transform((v) => (typeof v === 'number' ? v : undefined));
+const MICRONUTRIENT_KEYS = [
+  'sodiumMg',
+  'potassiumMg',
+  'calciumMg',
+  'ironMg',
+  'magnesiumMg',
+  'zincMg',
+  'vitaminAMcg',
+  'vitaminCMg',
+  'vitaminDMcg',
+  'vitaminB6Mg',
+  'vitaminB12Mcg',
+  'folateMcg',
+  'sugarG',
+  'addedSugarG',
+  'saturatedFatG',
+  'cholesterolMg',
+  'caffeineMg',
+  'alcoholG',
+] as const;
+
+function coerceFiniteNumberInput(val: unknown): unknown {
+  if (typeof val === 'string') {
+    const trimmed = val.trim();
+    if (!trimmed) return undefined;
+    const parsed = Number(trimmed);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return val;
+}
+
+const positiveNumber = z.preprocess(coerceFiniteNumberInput, z.number().positive());
+const nonNegativeNumber = z.preprocess(coerceFiniteNumberInput, z.number().nonnegative());
+
+const defaultZeroNonNegativeNumber = z.preprocess(
+  (val) => {
+    const coerced = coerceFiniteNumberInput(val);
+    return coerced === null || coerced === undefined ? 0 : coerced;
+  },
+  z.number().nonnegative()
+);
+
+const optionalNonNegativeNumber = z.preprocess(
+  (val) => {
+    const coerced = coerceFiniteNumberInput(val);
+    return coerced === null || coerced === undefined ? undefined : coerced;
+  },
+  z.number().nonnegative().optional()
+);
+
+const optionalTrimmedString = z.preprocess((val) => {
+  if (val === null || val === undefined) return undefined;
+  if (typeof val === 'string') {
+    const trimmed = val.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+  }
+  return val;
+}, z.string().optional());
+
+function normalizeServingUnit(val: unknown): unknown {
+  if (typeof val !== 'string') return val;
+  const cleaned = val.trim().toLowerCase();
+  if (cleaned === 'g' || cleaned === 'gram' || cleaned === 'grams') return 'g';
+  if (cleaned === 'ml' || cleaned === 'milliliter' || cleaned === 'milliliters') return 'ml';
+  if (cleaned === 'serving' || cleaned === 'servings') return 'serving';
+  return cleaned;
+}
+
+function normalizeMealItemInput(val: unknown): unknown {
+  if (!val || typeof val !== 'object' || Array.isArray(val)) {
+    return val;
+  }
+  const item = val as Record<string, unknown>;
+  const per100g = item.per100g;
+  if (!per100g || typeof per100g !== 'object' || Array.isArray(per100g)) {
+    return val;
+  }
+
+  const per100gObj = per100g as Record<string, unknown>;
+  const liftedMicros: Record<string, unknown> = {};
+  let hasLifted = false;
+  for (const key of MICRONUTRIENT_KEYS) {
+    if (per100gObj[key] !== undefined && per100gObj[key] !== null) {
+      liftedMicros[key] = per100gObj[key];
+      hasLifted = true;
+    }
+  }
+
+  if (!hasLifted) {
+    return val;
+  }
+
+  const existingMicros =
+    item.microsPer100g &&
+    typeof item.microsPer100g === 'object' &&
+    !Array.isArray(item.microsPer100g)
+      ? (item.microsPer100g as Record<string, unknown>)
+      : {};
+
+  return {
+    ...item,
+    microsPer100g: {
+      ...liftedMicros,
+      ...existingMicros,
+    },
+  };
+}
 
 export const AiMacroNutrientsSchema = z.object({
-  calories: z.number().nonnegative(),
-  protein: z.number().nonnegative(),
-  carbs: z.number().nonnegative(),
-  fat: z.number().nonnegative(),
-  fiber: z
-    .number()
-    .nonnegative()
-    .nullable()
-    .optional()
-    .transform((v) => (typeof v === 'number' ? v : 0)),
+  calories: nonNegativeNumber,
+  protein: nonNegativeNumber,
+  carbs: nonNegativeNumber,
+  fat: nonNegativeNumber,
+  fiber: defaultZeroNonNegativeNumber,
 });
 
 export const AiMicronutrientsSchema = z.object({
@@ -41,48 +137,65 @@ export const AiMicronutrientsSchema = z.object({
   alcoholG: optionalNonNegativeNumber,
 });
 
-export const AiMealItemSchema = z.object({
-  name: z.string().min(1),
-  grams: z.number().positive(),
-  per100g: AiMacroNutrientsSchema,
-  microsPer100g: AiMicronutrientsSchema.nullable()
-    .optional()
-    .transform((v) => v ?? undefined),
-});
+export const AiMealItemSchema = z.preprocess(
+  normalizeMealItemInput,
+  z.object({
+    name: z.string().trim().min(1),
+    grams: positiveNumber,
+    per100g: AiMacroNutrientsSchema,
+    microsPer100g: AiMicronutrientsSchema.nullable()
+      .optional()
+      .transform((v) => v ?? undefined),
+  })
+);
 
-export const AiMealScanResponseSchema = z.object({
-  items: z.array(AiMealItemSchema).min(1),
-});
+export const AiMealScanResponseSchema = z.preprocess(
+  (val) => (Array.isArray(val) ? { items: val } : val),
+  z.object({
+    items: z.array(AiMealItemSchema).min(1),
+  })
+);
 
 export const AiMealIdeaSchema = z.object({
   title: z.string().trim().min(1),
-  prepMinutes: z.number().nonnegative().optional(),
-  summary: z.string().trim().optional(),
+  prepMinutes: optionalNonNegativeNumber,
+  summary: optionalTrimmedString,
   items: z.array(AiMealItemSchema).min(1),
 });
 
-export const AiMealIdeasResponseSchema = z.object({
-  ideas: z.array(AiMealIdeaSchema).min(1).max(6),
-});
+export const AiMealIdeasResponseSchema = z.preprocess(
+  (val) => (Array.isArray(val) ? { ideas: val } : val),
+  z.object({
+    ideas: z.array(AiMealIdeaSchema).min(1).max(6),
+  })
+);
 
-export const AiLabelOcrResponseSchema = z.object({
-  name: z.string().optional(),
-  brand: z.string().optional(),
-  servingSize: z.number().positive(),
-  servingUnit: z.enum(['g', 'ml', 'serving']),
-  calories: z.number().nonnegative(),
-  protein: z.number().nonnegative(),
-  carbs: z.number().nonnegative(),
-  fat: z.number().nonnegative(),
-  fiber: optionalNonNegativeNumber,
-  sodiumMg: optionalNonNegativeNumber,
-  sugarG: optionalNonNegativeNumber,
-  addedSugarG: optionalNonNegativeNumber,
-  saturatedFatG: optionalNonNegativeNumber,
-  cholesterolMg: optionalNonNegativeNumber,
-  caffeineMg: optionalNonNegativeNumber,
-  alcoholG: optionalNonNegativeNumber,
-});
+export const AiLabelOcrResponseSchema = z.preprocess(
+  (val) => (Array.isArray(val) && val.length === 1 ? val[0] : val),
+  z.object({
+    name: optionalTrimmedString,
+    brand: optionalTrimmedString,
+    servingSize: positiveNumber,
+    servingUnit: z.preprocess(normalizeServingUnit, z.enum(['g', 'ml', 'serving'])),
+    servingWeightGrams: optionalNonNegativeNumber,
+    calories: nonNegativeNumber,
+    protein: defaultZeroNonNegativeNumber,
+    carbs: defaultZeroNonNegativeNumber,
+    fat: defaultZeroNonNegativeNumber,
+    fiber: optionalNonNegativeNumber,
+    sodiumMg: optionalNonNegativeNumber,
+    potassiumMg: optionalNonNegativeNumber,
+    calciumMg: optionalNonNegativeNumber,
+    ironMg: optionalNonNegativeNumber,
+    vitaminCMg: optionalNonNegativeNumber,
+    sugarG: optionalNonNegativeNumber,
+    addedSugarG: optionalNonNegativeNumber,
+    saturatedFatG: optionalNonNegativeNumber,
+    cholesterolMg: optionalNonNegativeNumber,
+    caffeineMg: optionalNonNegativeNumber,
+    alcoholG: optionalNonNegativeNumber,
+  })
+);
 
 export type AiMacroNutrients = z.infer<typeof AiMacroNutrientsSchema>;
 export type AiMealItem = z.infer<typeof AiMealItemSchema>;

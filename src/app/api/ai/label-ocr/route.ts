@@ -3,6 +3,8 @@ import { getServerAiConfig, callVisionChatCompletion, AiServiceError } from '@/l
 import { parseAiJsonResponse, AiLabelOcrResponseSchema } from '@/lib/ai/schemas';
 import { NO_STORE_HEADERS, requireSyncAuth } from '@/lib/auth/sync-auth';
 
+export const maxDuration = 60;
+
 export async function POST(request: Request) {
   const authError = requireSyncAuth(request);
   if (authError) return authError;
@@ -43,8 +45,9 @@ export async function POST(request: Request) {
 
   const promptText = [
     'Output JSON immediately without extended thinking.',
-    'Extract nutrition facts from this label image: optional name, optional brand, servingSize (>0), servingUnit ("g"|"ml"|"serving"), calories, protein, carbs, fat, and optional fiber, sodiumMg, sugarG, addedSugarG, saturatedFatG, cholesterolMg, caffeineMg, alcoholG per serving.',
-    'Return ONLY compact JSON:',
+    'Extract nutrition facts from this label image: optional name, optional brand, servingSize (>0), servingUnit ("g"|"ml"|"serving"), calories, protein, carbs, fat, and optional fiber, sodiumMg, potassiumMg, calciumMg, ironMg, vitaminCMg, sugarG, addedSugarG, saturatedFatG, cholesterolMg, caffeineMg, alcoholG per serving.',
+    'Omit optional fields if not visible on the label (do not use null). Use "g", "ml", or "serving" for servingUnit.',
+    'Return ONLY a compact JSON object (NOT an array):',
     '{"name":"Product Name","brand":"Brand","servingSize":30,"servingUnit":"g","calories":150,"protein":5,"carbs":25,"fat":3,"fiber":2,"sodiumMg":140,"sugarG":8,"addedSugarG":6,"saturatedFatG":1,"cholesterolMg":15}',
   ].join('\n');
 

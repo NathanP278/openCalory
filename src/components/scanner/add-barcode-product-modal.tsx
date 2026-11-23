@@ -93,7 +93,12 @@ export function AddBarcodeProductModal({
       }
 
       if (!res.ok) {
-        throw new Error(`OCR service failed with status ${res.status}`);
+        const errData = await res.json().catch(() => ({}));
+        const detail =
+          typeof errData?.error === 'string' && errData.error.trim()
+            ? `: ${errData.error.trim()}`
+            : '';
+        throw new Error(`OCR service failed (${res.status})${detail}`);
       }
 
       const data = await res.json();
