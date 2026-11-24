@@ -1,6 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import readline from 'node:readline';
+import zlib from 'node:zlib';
+import { Readable } from 'node:stream';
 import type { FoodServingOption, MacroNutrients, Micronutrients } from '@/types/nutrition';
 import type { CatalogFoodInput } from '@/lib/foods/catalog-schema';
 import { cleanFoodDisplayName, generateFoodAliases } from '@/lib/foods/name-normalizer';
@@ -376,6 +378,149 @@ export async function streamOffJsonlFile(
   return results;
 }
 
+const OFF_BULK_JSONL_GZ_URL =
+  'https://static.openfoodfacts.org/data/openfoodfacts-products.jsonl.gz';
+
+/**
+ * Streams Open Food Facts' official gzipped JSONL dump directly from static.openfoodfacts.org,
+ * filtering on-the-fly for high-completeness Atwater-valid products across our 23 regional quotas,
+ * and aborts the HTTP stream cleanly once enough regional products are collected (or time budget expires).
+ */
+async function fetchRegionalOffToJsonl(
+  destPath: string,
+  timeoutMs: number
+): Promise<boolean> {
+  fs.mkdirSync(path.dirname(destPath), { recursive: true });
+  const tmpPath = `${destPath}.tmp`;
+  const quotas = CORE_OFF_REGION_QUOTAS;
+  const maxTotal = Object.values(quotas).reduce((a, b) => a + b, 0);
+  const regionCounts = new Map<string, number>();
+  const seenCodes = new Set<string>();
+  const keptLines: string[] = [];
+
+  const controller = new AbortController();
+  const maxStreamMs = Math.max(timeoutMs, 150_000);
+  const timer = setTimeout(() => controller.abort(), maxStreamMs);
+
+  console.log(
+    `[off] Streaming ${OFF_BULK_JSONL_GZ_URL} (target up to ${maxTotal} region-balanced products, max ${Math.round(maxStreamMs / 1000)}s)...`
+  );
+
+  let scanned = 0;
+  try {
+    const res = await fetch(OFF_BULK_JSONL_GZ_URL, {
+      headers: {
+        'User-Agent': 'openCalory-catalog-builder/1.0 (+https://github.com/opencalory)',
+      },
+      signal: controller.signal,
+    });
+    if (!res.ok || !res.body) {
+      console.warn(`[off] Bulk dump returned HTTP ${res.status}`);
+      return false;
+    }
+
+    const nodeStream = Readable.fromWeb(res.body as unknown as import('node:stream/web').ReadableStream);
+    const gunzip = zlib.createGunzip();
+    nodeStream.pipe(gunzip);
+
+    const rl = readline.createInterface({
+      input: gunzip,
+      crlfDelay: Infinity,
+    });
+
+    for await (const line of rl) {
+      scanned++;
+      if (keptLines.length >= maxTotal) {
+        controller.abort();
+        rl.close();
+        break;
+      }
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+
+      let obj: Record<string, unknown>;
+      try {
+        obj = JSON.parse(trimmed) as Record<string, unknown>;
+      } catch {
+        continue;
+      }
+
+      const rawName = String(obj.product_name || obj.product_name_en || '').trim();
+      if (!rawName || rawName.length < 2) continue;
+
+      const region = detectOffRegion(obj.countries_tags);
+      const cap = quotas[region] ?? quotas.GLOBAL ?? 500;
+      const cur = regionCounts.get(region) ?? 0;
+      if (cur >= cap) continue;
+
+      const nutriments = (obj.nutriments && typeof obj.nutriments === 'object'
+        ? obj.nutriments
+        : {}) as Record<string, unknown>;
+      const calories = toNum(nutriments['energy-kcal_100g'] ?? nutriments['energy-kcal_100ml']);
+      const protein = toNum(nutriments.proteins_100g ?? nutriments.proteins_100ml);
+      const carbs = toNum(nutriments.carbohydrates_100g ?? nutriments.carbohydrates_100ml);
+      const fat = toNum(nutriments.fat_100g ?? nutriments.fat_100ml);
+      const fiber = toNum(nutriments.fiber_100g ?? nutriments.fiber_100ml);
+
+      if (!passesMacroQualityGate({ calories, protein, carbs, fat, fiber }, 4)) {
+        continue;
+      }
+
+      const code = String(obj.code ?? '').trim();
+      if (code && seenCodes.has(code)) continue;
+      if (code) seenCodes.add(code);
+
+      // Keep compact projected JSON so the cached file is small & fast to re-read
+      const compact = {
+        code,
+        product_name: rawName,
+        brands: obj.brands,
+        categories: obj.categories,
+        countries_tags: obj.countries_tags,
+        serving_size: obj.serving_size,
+        nutriments: {
+          'energy-kcal_100g': calories,
+          proteins_100g: protein,
+          carbohydrates_100g: carbs,
+          fat_100g: fat,
+          fiber_100g: fiber,
+          sodium_100g: nutriments.sodium_100g,
+          sugars_100g: nutriments.sugars_100g,
+          'saturated-fat_100g': nutriments['saturated-fat_100g'],
+        },
+      };
+
+      keptLines.push(JSON.stringify(compact));
+      regionCounts.set(region, cur + 1);
+
+      if (keptLines.length % 5000 === 0) {
+        console.log(`[off]   kept ${keptLines.length} / ${maxTotal} (scanned ${scanned})...`);
+      }
+    }
+  } catch (err) {
+    if (!controller.signal.aborted) {
+      console.warn(
+        `[off] Stream stopped early after ${keptLines.length} kept (${scanned} scanned): ${
+          err instanceof Error ? err.message : String(err)
+        }`
+      );
+    }
+  } finally {
+    clearTimeout(timer);
+  }
+
+  if (keptLines.length === 0) {
+    return false;
+  }
+
+  fs.writeFileSync(tmpPath, `${keptLines.join('\n')}\n`, 'utf8');
+  fs.renameSync(tmpPath, destPath);
+  console.log(
+    `[off] Cached ${keptLines.length} regional products (scanned ${scanned}) to ${destPath}`
+  );
+  return true;
+}
+
 export const offFoodRepoAdapter: CatalogAdapter = {
   id: 'off-foodrepo',
   name: 'Open Food Facts (ODbL) & FoodRepo (CC BY 4.0)',
@@ -385,7 +530,18 @@ export const offFoodRepoAdapter: CatalogAdapter = {
     const offDir = path.join(options.cacheDir, 'off');
     const foodRepoDir = path.join(options.cacheDir, 'foodrepo');
 
-    if (fs.existsSync(offDir)) {
+    let hasOffJsonl =
+      fs.existsSync(offDir) &&
+      fs
+        .readdirSync(offDir)
+        .some((f) => f.toLowerCase().endsWith('.jsonl') || f.toLowerCase().endsWith('.ndjson'));
+
+    if (!hasOffJsonl && !options.offlineOnly) {
+      const regionalPath = path.join(offDir, 'off-regional-products.jsonl');
+      hasOffJsonl = await fetchRegionalOffToJsonl(regionalPath, options.timeoutMs ?? 20_000);
+    }
+
+    if (hasOffJsonl && fs.existsSync(offDir)) {
       for (const file of fs.readdirSync(offDir)) {
         if (file.toLowerCase().endsWith('.jsonl') || file.toLowerCase().endsWith('.ndjson')) {
           const items = await streamOffJsonlFile(path.join(offDir, file), options.tier);

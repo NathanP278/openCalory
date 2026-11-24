@@ -60,6 +60,7 @@ export async function compileCatalogToSqlite(
 
   const { foods, legacyAliases } = deduplicateCatalogRecords(records);
 
+  const builtAt = new Date().toISOString();
   const client = createClient({ url: toLibsqlFileUrl(outputDbPath) });
   try {
     await client.execute('PRAGMA journal_mode = OFF');
@@ -124,7 +125,6 @@ export async function compileCatalogToSqlite(
       await client.batch(statements, 'write');
     }
 
-    const builtAt = new Date().toISOString();
     const metaRows: Array<[string, string]> = [
       ['version', meta.version],
       ['tier', meta.tier],
@@ -166,7 +166,7 @@ export async function compileCatalogToSqlite(
     version: meta.version,
     tier: meta.tier,
     sha256,
-    builtAt: new Date().toISOString(),
+    builtAt,
     foodCount: foods.length,
     gzipBytes,
     rawBytes,

@@ -275,7 +275,8 @@ export const openNutritionAdapter: CatalogAdapter = {
     }
 
     const text = fs.readFileSync(tsvPath, 'utf8');
-    const maxItems = options.tier === 'core' ? 12_000 : Number.POSITIVE_INFINITY;
+    // Prioritize everyday/prepared/restaurant rows first, then up to 60k total OpenNutrition foods
+    const maxItems = options.tier === 'core' ? 60_000 : Number.POSITIVE_INFINITY;
     const items = parseOpenNutritionTsv(text, { maxItems });
     console.log(`[opennutrition] Loaded ${items.length} foods from ${path.basename(tsvPath)}`);
     return items;
