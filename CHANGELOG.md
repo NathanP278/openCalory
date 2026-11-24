@@ -5,6 +5,43 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.2.0] - 2026-11-24
+
+### Added
+- **10,500+ Verified Foods — 4x+ Offline Database Expansion**:
+  - **Massive Multi-Source Catalog**: Expanded from the legacy 2,500-item list to **over 10,500+ verified foods**, unifying USDA SR Legacy & Foundation, MenuStat restaurant nutrition (global chains & fast food), national food composition tables, Open Food Facts, and curated international cuisine packs (Japanese, Korean, Thai, Vietnamese, Filipino, Italian, and more).
+  - **Blazing Fast On-Device Search (<25ms)**: Powered by client-side SQLite-WASM running in an Origin Private File System (OPFS) Web Worker. Search across 10,500+ items completely offline with sub-25ms median query latencies.
+  - **Ultra-Compact 2.1 MB Footprint**: Advanced compile-time deduplication and column compression packages an 11.5 MB database into an over-the-wire download of just ~2.1 MB.
+  - **Typo Tolerance & Multilingual Aliases**: Native full-text search (FTS5) with phonetic matching, typo tolerance (e.g., `"chiken brest"` resolves instantly to Chicken Breast), canonical name normalization, and rich culinary serving units (cups, bowls, slices, pieces, grams).
+  - **Bring Your Own Foods (CSV & JSON Importer)**: Full support for importing custom food datasets and restaurant menus directly through Settings with instant schema validation and on-device indexing.
+  - **Server-Side Fallback & Streaming Delivery**: Added server-side SQLite FTS5 streaming endpoints and opt-in live external provider fallbacks for unified `/api/foods/search` and `/api/foods/barcode` resolution.
+- **Catalog Management & Open Data Transparency**:
+  - Live food catalog status and database health monitor in Settings.
+  - Open Database License (ODbL) and transparent data source attribution.
+
+### Changed
+- **Replaced Legacy Search with SQLite FTS5**: Fully deprecated static JSON files (`staples-2500.json` & `ph-foods.json`), eliminating UI thread search lag and enabling unified, zero-latency autocomplete in food search and barcode scanner drawers.
+- **Enhanced Portion Resolution**: Integrated intelligent serving size pickers with fractional amounts across the entire 10,500+ food catalog.
+
+### Fixed
+- **AI Scanning & Recognition**:
+  - Added bounded retry logic with exponential backoff for transient meal scan network and provider failures.
+  - Enforced micronutrient estimation requirements in meal scan outputs with automatic fallback enrichment.
+  - Normalized meal scan and label OCR API responses, added fallback candidate retries, and properly surfaced OCR parsing errors.
+- **Logging & Entry Editing**:
+  - Added bidirectional recalculation of calories and macronutrients when modifying portions and serving sizes in logged entry edit drawers.
+  - Improved mixed fraction quantity parsing (e.g. `1 1/2`), unit singularization, and search ranking for common staples.
+- **Offline Storage & OPFS Workers**:
+  - Hardened OPFS SQLite-WASM worker initialization with watchdog monitoring, asset path resolution, and catalog pre-persistence integrity verification.
+  - Upgraded service worker caching (SW v4) for catalog manifests and navigation routes.
+  - Resolved Open Food Facts streaming ID collisions and national CSV parsing discrepancies.
+- **UI & Mobile Ergonomics**:
+  - Synchronized mobile `visualViewport` metrics to prevent on-screen keyboards from displacing bottom navigation and drawers on iOS Safari and mobile Chrome.
+  - Improved Apple Health integration status tracking to require verified incoming iOS Shortcut calls before displaying "Connected".
+
+### Documentation
+- Updated Apple Health integration guide to a streamlined 5-step iOS Personal Automation setup.
+
 ## [v0.1.0] - 2026-11-22
 
 ### Added
@@ -56,4 +93,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added GitHub community health files: Code of Conduct, Contributing guide, Issue templates, Pull Request template, and Security Policy.
 - Added self-hosting setup guide and environment variable documentation.
 
+[v0.2.0]: https://github.com/NathanP278/openCalory/compare/v0.1.0...v0.2.0
 [v0.1.0]: https://github.com/NathanP278/openCalory/releases/tag/v0.1.0
