@@ -1,10 +1,10 @@
 {
   "version": "2026.11.24",
   "tier": "core",
-  "sha256": "84948799934f423673aed7c3e0b7f7034ef070a637c7c74b3784dbe3889b8f5b",
-  "builtAt": "2026-11-24T13:40:39.856Z",
-  "foodCount": 29647,
-  "gzipBytes": 4588750,
-  "rawBytes": 22253568,
+  "sha256": "f2e8e96911a969260729fbf565dc74e47dced4637dd79f06956f2921d7a924ab",
+  "builtAt": "2026-11-24T16:02:57.431Z",
+  "foodCount": 147674,
+  "gzipBytes": 22346989,
+  "rawBytes": 95457280,
   "license": "ODbL-1.0"
 }

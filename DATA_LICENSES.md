@@ -4,7 +4,18 @@ The compiled openCalory food catalog artifacts (`food-catalog.db` and `food-cata
 
 > **Commercial API Policy:** openCalory NEVER scrapes, dumps, or compiles proprietary/commercial APIs (such as FatSecret, Edamam, or Nutritionix) into offline catalog artifacts.
 
-## Upstream Dataset Attributions
+## Built-In Core Catalog Sources (Current Build)
+
+The committed Core catalog (`public/data/food-catalog.db.gz`, 147,674 deduplicated foods from 170,051 raw records) compiles and deduplicates the following open datasets:
+
+| Dataset | Publisher / Maintainer | License | Region | Raw Records Contributed |
+| --- | --- | --- | --- | --- |
+| **USDA FoodData Central** (Foundation Foods, SR Legacy, FNDDS, Branded Foods) | U.S. Department of Agriculture, Agricultural Research Service | **CC0 1.0 / Public Domain** | US / Global | 38,493 (307 Foundation, 7,767 SR Legacy, 5,419 FNDDS, 25,000 Branded) |
+| **Canadian Nutrient File (CNF)** | Health Canada | **Open Government Licence – Canada** (<https://open.canada.ca/en/open-government-licence-canada>) | CA | 5,684 |
+| **Open Food Facts** | Open Food Facts Association & Contributors | **ODbL-1.0** (<https://opendatacommons.org/licenses/odbl/1-0/>) | Global (24 regions: SEA, East Asia, EU, Oceania, Americas, India) | 125,551 |
+| **openCalory Curated Regional & Restaurant Packs** (`data/curated/*.json`) | openCalory Contributors | **ODbL-1.0 / CC0-1.0** | PH, SEA, East Asia, Global | 323 |
+
+## All Supported Upstream Dataset Attributions (Core & Expanded)
 
 | Dataset | Publisher / Maintainer | License | Region | Notes |
 | --- | --- | --- | --- | --- |
