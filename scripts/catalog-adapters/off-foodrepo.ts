@@ -25,35 +25,35 @@ const FIXED_TIMESTAMP = 1700000000000;
  */
 export const CORE_OFF_REGION_QUOTAS: Record<string, number> = {
   // SEA
-  PH: 1500,
-  SG: 800,
-  MY: 800,
-  ID: 800,
-  TH: 800,
-  VN: 600,
+  PH: 3000,
+  SG: 1500,
+  MY: 1500,
+  ID: 1500,
+  TH: 1500,
+  VN: 1200,
   // East Asia
-  JP: 1500,
-  KR: 1000,
-  TW: 600,
-  HK: 500,
+  JP: 3000,
+  KR: 2000,
+  TW: 1200,
+  HK: 1000,
   // Europe
-  GB: 1500,
-  FR: 1500,
-  DE: 1500,
-  ES: 1000,
-  IT: 1000,
-  NL: 800,
+  GB: 3500,
+  FR: 3500,
+  DE: 3500,
+  ES: 2000,
+  IT: 2000,
+  NL: 1500,
   // Oceania
-  AU: 1200,
-  NZ: 600,
+  AU: 2500,
+  NZ: 1200,
   // Canada, India, LatAm
-  CA: 1200,
-  IN: 1000,
-  MX: 800,
-  BR: 800,
+  CA: 2500,
+  IN: 2000,
+  MX: 1500,
+  BR: 1500,
   // US & fallback
-  US: 2000,
-  GLOBAL: 500,
+  US: 4000,
+  GLOBAL: 2000,
 };
 
 const COUNTRY_TAG_TO_ISO: Record<string, string> = {
@@ -378,13 +378,13 @@ export async function streamOffJsonlFile(
   return results;
 }
 
-const OFF_BULK_JSONL_GZ_URL =
-  'https://static.openfoodfacts.org/data/openfoodfacts-products.jsonl.gz';
+const OFF_BULK_CSV_GZ_URL =
+  'https://static.openfoodfacts.org/data/en.openfoodfacts.org.products.csv.gz';
 
 /**
- * Streams Open Food Facts' official gzipped JSONL dump directly from static.openfoodfacts.org,
- * filtering on-the-fly for high-completeness Atwater-valid products across our 23 regional quotas,
- * and aborts the HTTP stream cleanly once enough regional products are collected (or time budget expires).
+ * Streams Open Food Facts' official gzipped TSV dump (9x smaller than JSONL) directly from
+ * static.openfoodfacts.org, filtering on-the-fly for Atwater-valid products across our 24
+ * non-US & global regional quotas, and exits cleanly once quotas fill or the time budget expires.
  */
 async function fetchRegionalOffToJsonl(
   destPath: string,
@@ -400,93 +400,151 @@ async function fetchRegionalOffToJsonl(
 
   const controller = new AbortController();
   const maxStreamMs = Math.max(timeoutMs, 150_000);
-  const timer = setTimeout(() => controller.abort(), maxStreamMs);
+  let stopRequested = false;
+  let activeRl: readline.Interface | null = null;
+  let activeGunzip: zlib.Gunzip | null = null;
+
+  const stopStream = () => {
+    if (stopRequested) return;
+    stopRequested = true;
+    try {
+      activeRl?.close();
+    } catch {
+      // ignore
+    }
+    try {
+      activeGunzip?.destroy();
+    } catch {
+      // ignore
+    }
+    controller.abort();
+  };
+
+  const timer = setTimeout(stopStream, maxStreamMs);
 
   console.log(
-    `[off] Streaming ${OFF_BULK_JSONL_GZ_URL} (target up to ${maxTotal} region-balanced products, max ${Math.round(maxStreamMs / 1000)}s)...`
+    `[off] Streaming ${OFF_BULK_CSV_GZ_URL} (target up to ${maxTotal} region-balanced products, max ${Math.round(maxStreamMs / 1000)}s)...`
   );
 
   let scanned = 0;
   try {
-    const res = await fetch(OFF_BULK_JSONL_GZ_URL, {
+    const res = await fetch(OFF_BULK_CSV_GZ_URL, {
       headers: {
         'User-Agent': 'openCalory-catalog-builder/1.0 (+https://github.com/opencalory)',
       },
       signal: controller.signal,
     });
     if (!res.ok || !res.body) {
-      console.warn(`[off] Bulk dump returned HTTP ${res.status}`);
+      console.warn(`[off] Bulk TSV dump returned HTTP ${res.status}`);
       return false;
     }
 
     const nodeStream = Readable.fromWeb(res.body as unknown as import('node:stream/web').ReadableStream);
     const gunzip = zlib.createGunzip();
+    activeGunzip = gunzip;
+    nodeStream.on('error', () => {
+      // Expected on clean abort
+    });
+    gunzip.on('error', () => {
+      // Expected on clean abort
+    });
     nodeStream.pipe(gunzip);
 
     const rl = readline.createInterface({
       input: gunzip,
       crlfDelay: Infinity,
     });
+    activeRl = rl;
+    rl.on('error', () => {
+      // Expected on clean abort
+    });
+
+    let headers: string[] | null = null;
+    let idxCode = -1;
+    let idxName = -1;
+    let idxBrands = -1;
+    let idxCategories = -1;
+    let idxCountries = -1;
+    let idxServing = -1;
+    let idxKcal = -1;
+    let idxProtein = -1;
+    let idxCarbs = -1;
+    let idxFat = -1;
+    let idxFiber = -1;
+    let idxSodium = -1;
+    let idxSugars = -1;
+    let idxSatFat = -1;
 
     for await (const line of rl) {
-      scanned++;
-      if (keptLines.length >= maxTotal) {
-        controller.abort();
-        rl.close();
-        break;
-      }
-      const trimmed = line.trim();
-      if (!trimmed) continue;
-
-      let obj: Record<string, unknown>;
-      try {
-        obj = JSON.parse(trimmed) as Record<string, unknown>;
-      } catch {
+      if (stopRequested) break;
+      if (!headers) {
+        headers = line.split('\t').map((h) => h.trim().toLowerCase());
+        idxCode = headers.indexOf('code');
+        idxName = headers.indexOf('product_name');
+        idxBrands = headers.indexOf('brands');
+        idxCategories = headers.indexOf('categories');
+        idxCountries = headers.indexOf('countries_tags');
+        idxServing = headers.indexOf('serving_size');
+        idxKcal = headers.indexOf('energy-kcal_100g');
+        idxProtein = headers.indexOf('proteins_100g');
+        idxCarbs = headers.indexOf('carbohydrates_100g');
+        idxFat = headers.indexOf('fat_100g');
+        idxFiber = headers.indexOf('fiber_100g');
+        idxSodium = headers.indexOf('sodium_100g');
+        idxSugars = headers.indexOf('sugars_100g');
+        idxSatFat = headers.indexOf('saturated-fat_100g');
         continue;
       }
 
-      const rawName = String(obj.product_name || obj.product_name_en || '').trim();
+      scanned++;
+      if (keptLines.length >= maxTotal) {
+        stopStream();
+        break;
+      }
+
+      const cols = line.split('\t');
+      const rawName = (idxName >= 0 ? cols[idxName] : '')?.trim() || '';
       if (!rawName || rawName.length < 2) continue;
 
-      const region = detectOffRegion(obj.countries_tags);
-      const cap = quotas[region] ?? quotas.GLOBAL ?? 500;
+      const rawCountries = (idxCountries >= 0 ? cols[idxCountries] : '')?.trim() || '';
+      const countriesTags = rawCountries
+        ? rawCountries.split(',').map((c) => c.trim().toLowerCase())
+        : [];
+      const region = detectOffRegion(countriesTags);
+      const cap = quotas[region] ?? quotas.GLOBAL ?? 2000;
       const cur = regionCounts.get(region) ?? 0;
       if (cur >= cap) continue;
 
-      const nutriments = (obj.nutriments && typeof obj.nutriments === 'object'
-        ? obj.nutriments
-        : {}) as Record<string, unknown>;
-      const calories = toNum(nutriments['energy-kcal_100g'] ?? nutriments['energy-kcal_100ml']);
-      const protein = toNum(nutriments.proteins_100g ?? nutriments.proteins_100ml);
-      const carbs = toNum(nutriments.carbohydrates_100g ?? nutriments.carbohydrates_100ml);
-      const fat = toNum(nutriments.fat_100g ?? nutriments.fat_100ml);
-      const fiber = toNum(nutriments.fiber_100g ?? nutriments.fiber_100ml);
+      const calories = toNum(idxKcal >= 0 ? cols[idxKcal] : 0);
+      const protein = toNum(idxProtein >= 0 ? cols[idxProtein] : 0);
+      const carbs = toNum(idxCarbs >= 0 ? cols[idxCarbs] : 0);
+      const fat = toNum(idxFat >= 0 ? cols[idxFat] : 0);
+      const fiber = toNum(idxFiber >= 0 ? cols[idxFiber] : 0);
 
       if (!passesMacroQualityGate({ calories, protein, carbs, fat, fiber }, 4)) {
         continue;
       }
 
-      const code = String(obj.code ?? '').trim();
+      const code = (idxCode >= 0 ? cols[idxCode] : '')?.trim() || '';
       if (code && seenCodes.has(code)) continue;
       if (code) seenCodes.add(code);
 
-      // Keep compact projected JSON so the cached file is small & fast to re-read
       const compact = {
         code,
         product_name: rawName,
-        brands: obj.brands,
-        categories: obj.categories,
-        countries_tags: obj.countries_tags,
-        serving_size: obj.serving_size,
+        brands: (idxBrands >= 0 ? cols[idxBrands] : '')?.trim() || undefined,
+        categories: (idxCategories >= 0 ? cols[idxCategories] : '')?.trim() || undefined,
+        countries_tags: countriesTags,
+        serving_size: (idxServing >= 0 ? cols[idxServing] : '')?.trim() || undefined,
         nutriments: {
           'energy-kcal_100g': calories,
           proteins_100g: protein,
           carbohydrates_100g: carbs,
           fat_100g: fat,
           fiber_100g: fiber,
-          sodium_100g: nutriments.sodium_100g,
-          sugars_100g: nutriments.sugars_100g,
-          'saturated-fat_100g': nutriments['saturated-fat_100g'],
+          ...(idxSodium >= 0 && cols[idxSodium] ? { sodium_100g: toNum(cols[idxSodium]) } : {}),
+          ...(idxSugars >= 0 && cols[idxSugars] ? { sugars_100g: toNum(cols[idxSugars]) } : {}),
+          ...(idxSatFat >= 0 && cols[idxSatFat] ? { 'saturated-fat_100g': toNum(cols[idxSatFat]) } : {}),
         },
       };
 
@@ -498,7 +556,7 @@ async function fetchRegionalOffToJsonl(
       }
     }
   } catch (err) {
-    if (!controller.signal.aborted) {
+    if (!stopRequested) {
       console.warn(
         `[off] Stream stopped early after ${keptLines.length} kept (${scanned} scanned): ${
           err instanceof Error ? err.message : String(err)

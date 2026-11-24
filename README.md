@@ -43,10 +43,9 @@ Built mobile-first for effortless one-handed logging throughout the day, expandi
 ## Features
 
 - **Adherence-Neutral Dashboard:** Daily calorie progress arc (`Consumed` / `Remaining` toggle), protein/carbs/fat/fiber bars, 7-day stacked macro pace, 30-day logging heatmap, and micronutrient breakdown with top-contributor drill-down. Surplus intake is displayed calmly without punitive red alarms.
-- **Fast Multi-Source Food Logging (10,500+ Verified Foods Offline):**
-  - **Embedded Core SQLite FTS5 Catalog (Offline-First):** Ships with **over 10,500+ verified foods** compiled from USDA SR Legacy & Foundation, MenuStat restaurant nutrition, national food composition tables, Open Food Facts, and curated international cuisine packs—compressed into a compact **~2.1 MB** bundle (`public/data/food-catalog.db.gz`) that runs on-device via SQLite-WASM in an Origin Private File System (OPFS) Web Worker for **sub-25ms** offline full-text search, typo tolerance, multilingual aliases, and barcode lookup (with automatic server fallback when OPFS is unavailable).
-  - **Optional Expanded Catalog Pack:** Self-hosters can pull or build a larger Expanded Pack (`npm run food-db:pull`) with broader global & packaged food coverage.
-  - **Live External Search & Opt-In Commercial Providers:** Stateless server proxies for **USDA FoodData Central** and **Open Food Facts**, plus strictly opt-in live-only providers (**FatSecret**, **Edamam**, **Nutritionix**) when you supply your own API keys in `.env.local`.
+- **Fast Multi-Source Food Logging (29,600+ Verified & Branded Foods Built-In):**
+  - **Built-In Unified SQLite FTS5 Catalog (Offline-First):** Ships directly inside the repo with **29,600+ deduplicated foods** compiled from USDA Foundation, SR Legacy & FNDDS, region-balanced non-US & global Open Food Facts branded products (SEA, East Asia, Europe, Oceania, Canada, India, LatAm, US), and curated international cuisine & restaurant chain packs—compressed into a **~4.4 MB** bundle (`public/data/food-catalog.db.gz`) that deploys straight to Vercel and runs on-device via SQLite-WASM in an OPFS Web Worker for **sub-10ms** offline full-text search, natural household serving units, typo tolerance, multilingual aliases, and barcode lookup (with automatic server fallback when OPFS is unavailable).
+  - **Live External Search & Opt-In Commercial Providers:** Smart fallback + on-demand **Search online** via stateless server proxies for **USDA FoodData Central** and **Open Food Facts**, plus strictly opt-in live-only providers (**FatSecret**, **Edamam**, **Nutritionix**) when you supply your own API keys in `.env.local`.
   - **In-App CSV/JSON Food Importer:** Bring your own food tables or restaurant menus—upload custom `.csv` or `.json` files directly in **Settings → Food Database Catalog** for instant schema validation and local indexing.
   - **Camera Barcode Scanner:** Scan packaged barcodes directly in the browser (`html5-qrcode`) and add custom barcode products when missing.
   - **Quick Add, Copy From Date & Pinned Foods:** Log raw macros directly, copy meals from yesterday/any date, or pin frequent foods and recipes.
@@ -270,19 +269,14 @@ Authorization: Bearer <SHORTCUT_API_KEY>
 
 returns today's latest weigh-in (`id`, `date`, `weight_kg`, `weight_lb`, `recorded_at`), or `null` fields if no weigh-in was logged today.
 
-### Food Database Catalog & Optional Expanded Pack
+### Built-In Food Database Catalog
 
-openCalory bundles a **Core SQLite FTS5 catalog** (`public/data/food-catalog.db.gz` and `public/data/catalog-manifest.json`) featuring **over 10,500+ verified foods** compressed down to just **~2.1 MB** (~11.5 MB uncompressed). In supported browsers, a background Web Worker verifies available OPFS storage quota, downloads the compressed catalog once, and runs full-text and barcode queries locally with **sub-25ms median latency** and zero network dependency (falling back transparently to `/api/foods/search` and `/api/foods/barcode/[code]` when OPFS is unavailable).
+openCalory embeds a unified **SQLite FTS5 catalog** (`public/data/food-catalog.db.gz` and `public/data/catalog-manifest.json`) directly in the repository with **29,600+ deduplicated foods** compressed to **~4.4 MB** (~21.2 MB uncompressed) — zero runtime fetching or extra setup required on Vercel, Docker, or local installs. In supported browsers, a background Web Worker verifies available OPFS storage quota, syncs the catalog once, and runs full-text and barcode queries locally with **sub-10ms median latency** offline (falling back transparently to `/api/foods/search` and `/api/foods/barcode/[code]` when OPFS is unavailable).
 
-For self-hosted deployments that want broader international and packaged food coverage, you can pull or build the optional **Expanded Pack**:
+To rebuild the built-in catalog locally from upstream open datasets (or include your own local CSV nutrition tables):
 
 ```bash
-# Pull a prebuilt Expanded Pack into ./data/catalog (or $FOOD_CATALOG_DIR)
-npm run food-db:pull
-
-# Or rebuild the Core / Expanded catalog locally from upstream open datasets
 npm run food-db:build
-npm run food-db:build:expanded
 ```
 
 You can also import your own `.csv` or `.json` nutrition tables directly in the app via **Settings → Food Database Catalog**. See [DATA_LICENSES.md](./DATA_LICENSES.md) for the full list of upstream open nutrition datasets and attributions.
