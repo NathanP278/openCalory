@@ -171,6 +171,33 @@ export function bestTokenMatchScore(queryToken: string, fieldTokens: string[]): 
   return best;
 }
 
+const SUBPART_PENALTY_TOKENS = new Set([
+  'yolk',
+  'white',
+  'whites',
+  'dried',
+  'powder',
+  'powdered',
+  'dehydrated',
+  'shell',
+  'substitute',
+  'frozen',
+  'pasteurized',
+  'peel',
+  'skin',
+  'leaves',
+  'leaf',
+  'bran',
+  'germ',
+  'flour',
+  'starch',
+  'juice',
+  'syrup',
+  'baby',
+  'infant',
+  'formula',
+]);
+
 export function scoreCandidate(
   candidate: CandidateRow,
   queryTokens: string[],
@@ -180,6 +207,8 @@ export function scoreCandidate(
   const { row, bm25 } = candidate;
   const nameNorm = normalizeForScoring(row.name);
   const nameTokens = nameNorm ? nameNorm.split(' ') : [];
+  const nameTokenSet = new Set(nameTokens);
+  const queryTokenSet = new Set(queryTokens);
   const brandNorm = normalizeForScoring(row.brand);
   const brandTokens = brandNorm ? brandNorm.split(' ') : [];
 
@@ -193,21 +222,42 @@ export function scoreCandidate(
 
   let score = Math.min(Math.max(-bm25, 0), 40);
 
+  const hasExactWholeWordInName = (qt: string): boolean =>
+    nameTokenSet.has(qt) ||
+    nameTokenSet.has(`${qt}s`) ||
+    (qt.endsWith('s') && qt.length > 3 && nameTokenSet.has(qt.slice(0, -1)));
+
+  const allQueryTokensExactInName =
+    queryTokens.length > 0 && queryTokens.every((qt) => hasExactWholeWordInName(qt));
+
   // Exact name / alias / prefix boosts
   if (nameNorm === queryNorm) {
     score += 140;
   } else if (aliasParts.includes(queryNorm)) {
     score += 105;
-  } else if (
-    nameNorm.startsWith(`${queryNorm} `) ||
-    row.name.toLowerCase().startsWith(`${queryNorm},`) ||
-    (nameTokens.length > 0 &&
-      queryTokens.length === 1 &&
-      (nameTokens[0] === queryTokens[0] || nameTokens[0] === `${queryTokens[0]}s`))
-  ) {
-    score += 65;
+  } else if (allQueryTokensExactInName) {
+    score += 75;
+    if (
+      nameNorm.startsWith(`${queryNorm} `) ||
+      row.name.toLowerCase().startsWith(`${queryNorm},`) ||
+      (nameTokens.length > 0 &&
+        queryTokens.length === 1 &&
+        (nameTokens[0] === queryTokens[0] || nameTokens[0] === `${queryTokens[0]}s`))
+    ) {
+      score += 20;
+    }
+    if (queryTokens.length === 1 && nameTokenSet.has('whole')) {
+      score += 35;
+    }
   } else if (nameNorm.startsWith(queryNorm)) {
-    score += 22;
+    score += 18;
+  }
+
+  // Penalize subpart / derivative foods (e.g. Egg Yolk, Egg White, Dried) unless user asked for them
+  for (const nt of nameTokens) {
+    if (SUBPART_PENALTY_TOKENS.has(nt) && !queryTokenSet.has(nt)) {
+      score -= 32;
+    }
   }
 
   // Token coverage + fuzzy match score

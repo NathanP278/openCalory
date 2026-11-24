@@ -68,7 +68,7 @@ describe('Task 13: Manifest, Service Worker & PwaRegister', () => {
       const sw = fs.readFileSync(swPath, 'utf-8');
 
       // Version bump
-      expect(sw).toContain("CACHE_NAME = 'opencalory-v3'");
+      expect(sw).toContain("CACHE_NAME = 'opencalory-v4'");
 
       // Precache assets
       const precacheMatch = sw.match(/const\s+PRECACHE_ASSETS\s*=\s*\[([\s\S]*?)\]/);

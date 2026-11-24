@@ -117,7 +117,15 @@ export function createClientCatalogController(
   const listeners = new Set<(next: CatalogSyncState) => void>();
 
   let worker: WorkerLike | null = null;
+  let initWatchdogTimer: ReturnType<typeof setTimeout> | null = null;
   let initialized = false;
+
+  const clearInitWatchdog = () => {
+    if (initWatchdogTimer !== null) {
+      clearTimeout(initWatchdogTimer);
+      initWatchdogTimer = null;
+    }
+  };
   let disposed = false;
   let nextRequestId = 1;
   let latestSearchRequestId = 0;
@@ -217,6 +225,13 @@ export function createClientCatalogController(
     if (!msg || typeof msg !== 'object') return;
 
     if (msg.type === 'status') {
+      if (
+        msg.state.status === 'ready' ||
+        msg.state.status === 'fallback' ||
+        (msg.state.status === 'syncing' && (msg.state.progressPct ?? 0) > 0)
+      ) {
+        clearInitWatchdog();
+      }
       setState(msg.state);
       return;
     }
@@ -277,6 +292,7 @@ export function createClientCatalogController(
   };
 
   const handleWorkerError = (event: { message?: string }) => {
+    clearInitWatchdog();
     if (disposed) return;
     const reason = event?.message || 'Catalog Web Worker encountered an unexpected error.';
 
@@ -368,6 +384,16 @@ export function createClientCatalogController(
       worker = w;
       w.addEventListener('message', handleWorkerMessage as (ev: never) => void);
       w.addEventListener('error', handleWorkerError as (ev: never) => void);
+      clearInitWatchdog();
+      if (!deps.createWorker) {
+        initWatchdogTimer = setTimeout(() => {
+          initWatchdogTimer = null;
+          if (disposed || state.status !== 'syncing') return;
+          handleWorkerError({
+            message: 'Offline worker initialization timed out; using fast server catalog.',
+          });
+        }, 15_000);
+      }
       const initMsg: WorkerRequestMessage = { type: 'init', manifest };
       w.postMessage(initMsg);
     } catch (err) {

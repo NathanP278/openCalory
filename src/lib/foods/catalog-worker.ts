@@ -488,7 +488,12 @@ if (isDedicatedWorker) {
       const opfsRoot = (await navigator.storage.getDirectory()) as unknown as OpfsDirectoryLike;
 
       const sqlite3Module = await import('@sqlite.org/sqlite-wasm');
-      const sqlite3 = await sqlite3Module.default();
+      const sqlite3Init = sqlite3Module.default as unknown as (opts?: {
+        locateFile?: (file: string) => string;
+      }) => Promise<Awaited<ReturnType<typeof sqlite3Module.default>>>;
+      const sqlite3 = await sqlite3Init({
+        locateFile: (file: string) => (file.endsWith('.wasm') ? '/wasm/sqlite3.wasm' : file),
+      });
 
       if (!poolUtil) {
         poolUtil = await sqlite3.installOpfsSAHPoolVfs({

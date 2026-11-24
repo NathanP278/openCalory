@@ -1,5 +1,5 @@
 // openCalory Vanilla PWA Service Worker (Zero-dependency, Next.js 16 Turbopack compatible)
-const CACHE_NAME = 'opencalory-v3';
+const CACHE_NAME = 'opencalory-v4';
 
 const PRECACHE_ASSETS = [
   '/',
@@ -60,9 +60,32 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 1. /api/*: Network-only (never cached)
-  if (url.pathname.startsWith('/api/')) {
+  // 1. /api/*, Web Workers, and WASM binaries: Network-only (never intercepted/cached by SW)
+  if (
+    url.pathname.startsWith('/api/') ||
+    event.request.destination === 'worker' ||
+    url.pathname.endsWith('.wasm')
+  ) {
     event.respondWith(fetch(event.request));
+    return;
+  }
+
+  // 1b. HTML navigations: Network-first with offline cache fallback (prevents stale HTML referencing deleted JS chunks after deploy)
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      caches.open(CACHE_NAME).then((cache) =>
+        fetch(event.request)
+          .then((networkResponse) => {
+            if (networkResponse && networkResponse.status === 200) {
+              cache.put(event.request, networkResponse.clone());
+            }
+            return networkResponse;
+          })
+          .catch(() =>
+            cache.match(event.request).then((cached) => cached || cache.match('/'))
+          )
+      )
+    );
     return;
   }
 

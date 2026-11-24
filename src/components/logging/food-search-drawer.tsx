@@ -137,13 +137,13 @@ function formatFoodBasisLabel(item: FoodItem): string {
   if (item.basis === 'perServing') {
     const count = item.servingSize > 0 ? item.servingSize : 1;
     const unitLabel = formatPortionUnit(count, item.servingUnit || 'serving');
-    const gramNote = item.servingWeightGrams ? ` Â· ${item.servingWeightGrams}g` : '';
+    const gramNote = item.servingWeightGrams ? ` · ${item.servingWeightGrams}g` : '';
     return `(per ${count} ${unitLabel}${gramNote})`;
   }
   if (item.basis === 'per100ml') {
-    return firstOpt ? `(per 100ml Â· 1 ${firstOpt.unit} = ${firstOpt.grams}ml)` : '(per 100ml)';
+    return firstOpt ? `(per 100ml · 1 ${firstOpt.unit} = ${firstOpt.grams}ml)` : '(per 100ml)';
   }
-  return firstOpt ? `(per 100g Â· 1 ${firstOpt.unit} = ${firstOpt.grams}g)` : '(per 100g)';
+  return firstOpt ? `(per 100g · 1 ${firstOpt.unit} = ${firstOpt.grams}g)` : '(per 100g)';
 }
 
 function formatRecipeBasisLabel(recipe: CustomRecipe): string {
@@ -157,11 +157,11 @@ function formatRecipeBasisLabel(recipe: CustomRecipe): string {
 
   if (recipe.basis === 'perServing') {
     return perServingGrams > 0
-      ? `(per 1 serving Â· ${perServingGrams}g)`
+      ? `(per 1 serving · ${perServingGrams}g)`
       : '(per 1 serving)';
   }
   return perServingGrams > 0
-    ? `(per 100g Â· 1 serving = ${perServingGrams}g)`
+    ? `(per 100g · 1 serving = ${perServingGrams}g)`
     : '(per 100g)';
 }
 
@@ -194,17 +194,41 @@ function resolveDefaultFoodSelection(
     }
   }
 
+  const COUNTABLE_UNIT_PRIORITY = [
+    'large',
+    'pc',
+    'piece',
+    'medium',
+    'slice',
+    'fillet',
+    'breast',
+    'thigh',
+    'patty',
+    'pack',
+    'can',
+    'bottle',
+    'bar',
+    'scoop',
+    'order',
+    'serving',
+    'bowl',
+    'cup',
+  ];
+
+  const pickBestHouseholdOption = (): FoodServingOption | undefined => {
+    for (const unitKey of COUNTABLE_UNIT_PRIORITY) {
+      const found = options.find((o) => o.unit.toLowerCase() === unitKey);
+      if (found) return found;
+    }
+    return options.find((o) => o.unit !== 'g' && o.unit !== 'ml' && o.unit !== 'oz' && o.unit !== 'fl oz');
+  };
+
   const preferred =
     food.servingUnit !== 'g' && food.servingUnit !== 'ml'
       ? options.find((o) => o.unit === food.servingUnit) ??
-        options.find((o) => o.unit !== 'g' && o.unit !== 'ml') ??
+        pickBestHouseholdOption() ??
         options[0]
-      : options.find(
-          (o) =>
-            o.unit !== 'g' &&
-            o.unit !== 'ml' &&
-            o.id === food.servingOptions?.[0]?.id
-        ) ?? options[0];
+      : pickBestHouseholdOption() ?? options[0];
 
   const initialAmount =
     preferred?.defaultAmount ??
