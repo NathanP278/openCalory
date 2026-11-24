@@ -22,6 +22,12 @@ export function VisualViewportSync() {
     let rafId: number | null = null;
     let rafPending = false;
     const timers: number[] = [];
+    let lastWidth = window.innerWidth;
+    let maxViewportHeight = Math.max(
+      window.innerHeight || 0,
+      root.clientHeight || 0,
+      vv ? Math.round(vv.height) : 0
+    );
 
     const clearViewportVars = () => {
       root.style.removeProperty("--vvh");
@@ -37,11 +43,24 @@ export function VisualViewportSync() {
         return;
       }
 
+      const currentWidth = window.innerWidth;
       const layoutHeight = window.innerHeight || root.clientHeight;
       const visualHeight = Math.max(0, Math.round(vv.height));
       const offsetTop = Math.max(0, Math.round(vv.offsetTop));
-      const heightDelta = layoutHeight - visualHeight;
-      const isMobile = window.innerWidth < MOBILE_BREAKPOINT_PX;
+
+      // Reset baseline on orientation/viewport width change
+      if (Math.abs(currentWidth - lastWidth) > 40) {
+        lastWidth = currentWidth;
+        maxViewportHeight = Math.max(layoutHeight, visualHeight);
+      } else {
+        maxViewportHeight = Math.max(maxViewportHeight, layoutHeight, visualHeight);
+      }
+
+      const heightDelta = Math.max(
+        layoutHeight - visualHeight,
+        maxViewportHeight - visualHeight
+      );
+      const isMobile = currentWidth < MOBILE_BREAKPOINT_PX;
       const isKeyboardOpen = isMobile && heightDelta > KEYBOARD_OPEN_THRESHOLD_PX;
 
       if (isKeyboardOpen || offsetTop > 0) {
@@ -61,6 +80,14 @@ export function VisualViewportSync() {
       rafId = window.requestAnimationFrame(syncNow);
     };
 
+    const handleFocusIn = () => {
+      scheduleSync();
+      // iOS Safari / standalone PWA animates the keyboard over ~300ms
+      timers.push(window.setTimeout(syncNow, 60));
+      timers.push(window.setTimeout(syncNow, 180));
+      timers.push(window.setTimeout(syncNow, 360));
+    };
+
     const handleFocusOut = () => {
       scheduleSync();
       // iOS Safari settles visualViewport slightly after blur animation completes
@@ -73,7 +100,8 @@ export function VisualViewportSync() {
     vv?.addEventListener("resize", scheduleSync);
     vv?.addEventListener("scroll", scheduleSync);
     window.addEventListener("resize", scheduleSync, { passive: true });
-    window.addEventListener("focusin", scheduleSync, { passive: true });
+    window.addEventListener("scroll", scheduleSync, { passive: true });
+    window.addEventListener("focusin", handleFocusIn, { passive: true });
     window.addEventListener("focusout", handleFocusOut, { passive: true });
 
     return () => {
@@ -86,7 +114,8 @@ export function VisualViewportSync() {
       vv?.removeEventListener("resize", scheduleSync);
       vv?.removeEventListener("scroll", scheduleSync);
       window.removeEventListener("resize", scheduleSync);
-      window.removeEventListener("focusin", scheduleSync);
+      window.removeEventListener("scroll", scheduleSync);
+      window.removeEventListener("focusin", handleFocusIn);
       window.removeEventListener("focusout", handleFocusOut);
       clearViewportVars();
     };

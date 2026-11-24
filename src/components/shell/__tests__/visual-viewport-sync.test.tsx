@@ -84,6 +84,17 @@ describe("VisualViewportSync", () => {
     expect(document.documentElement.style.getPropertyValue("--vvh")).toBe("");
     expect(document.documentElement.style.getPropertyValue("--vv-offset-top")).toBe("");
 
+    // Simulate mobile browser where window.innerHeight shrinks alongside visualViewport.height
+    act(() => {
+      Object.defineProperty(window, "innerHeight", { configurable: true, value: 500 });
+      mockVv.height = 500;
+      mockVv.offsetTop = 0;
+      listeners.get("resize")?.forEach((fn) => fn(new Event("resize")));
+    });
+
+    expect(document.documentElement.classList.contains("keyboard-open")).toBe(true);
+    expect(document.documentElement.style.getPropertyValue("--vvh")).toBe("500px");
+
     unmount();
   });
 });

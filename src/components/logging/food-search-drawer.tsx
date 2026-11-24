@@ -1071,7 +1071,7 @@ function FoodSearchContent({ date, mealSlot, onClose }: FoodSearchContentProps) 
           aria-hidden="true"
         />
         {/* Header */}
-        <div className="flex items-center justify-between pb-3 border-b border-border">
+        <div className="shrink-0 flex items-center justify-between pb-3 border-b border-border">
           <div className="flex items-center gap-2.5">
             {selectedFood ? (
               <button
@@ -1382,7 +1382,7 @@ function FoodSearchContent({ date, mealSlot, onClose }: FoodSearchContentProps) 
           /* Search View */
           <div className="pt-3 flex-1 flex flex-col min-h-0 space-y-2.5">
             {/* Search Input */}
-            <div className="relative">
+            <div className="relative shrink-0">
               <Search
                 className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
                 aria-hidden="true"
@@ -1413,7 +1413,7 @@ function FoodSearchContent({ date, mealSlot, onClose }: FoodSearchContentProps) 
               <div
                 role="tablist"
                 aria-label="Food history tabs"
-                className="grid grid-cols-3 gap-1 p-1 rounded-xl bg-surface-sub border border-border"
+                className="shrink-0 grid grid-cols-3 gap-1 p-1 rounded-xl bg-surface-sub border border-border"
               >
                 {(
                   [
@@ -1485,7 +1485,7 @@ function FoodSearchContent({ date, mealSlot, onClose }: FoodSearchContentProps) 
             <div
               ref={resultsContainerRef}
               data-testid="food-search-results"
-              className="flex-1 overflow-y-auto overscroll-contain space-y-1.5 min-h-[200px] sm:min-h-[280px] max-h-[52dvh] sm:max-h-[420px] pr-0.5"
+              className="flex-1 overflow-y-auto overscroll-contain space-y-1.5 min-h-0 sm:min-h-[280px] sm:max-h-[420px] pr-0.5"
             >
               {displayedEntries.length > 0 ? (
                 <>
