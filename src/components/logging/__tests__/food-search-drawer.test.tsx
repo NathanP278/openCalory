@@ -1051,4 +1051,27 @@ describe('FoodSearchDrawer component', () => {
     });
     expect(await db.foodLogs.count()).toBe(0);
   });
+
+  test('renders food-search-row containment class and omits stagger-item animation during active search typing', async () => {
+    render(
+      <FoodSearchDrawer
+        open
+        date="2026-11-14"
+        mealSlot="lunch"
+        onClose={vi.fn()}
+      />
+    );
+
+    const searchInput = screen.getByLabelText(/search foods/i);
+    fireEvent.change(searchInput, { target: { value: 'chicken' } });
+
+    await waitFor(() => {
+      expect(screen.getByText('Chicken breast, raw')).toBeInTheDocument();
+    });
+
+    const resultsList = screen.getByTestId('food-search-results');
+    const rowEl = resultsList.querySelector('.food-search-row');
+    expect(rowEl).not.toBeNull();
+    expect(rowEl?.className).not.toContain('stagger-item');
+  });
 });

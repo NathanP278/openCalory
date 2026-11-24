@@ -1,23 +1,20 @@
 "use client";
 
-import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
   EASE_EXPRESSIVE,
   SPRING_SHEET,
   isTestEnvironment,
+  runViewTransition,
+  triggerHaptic,
 } from '@/lib/motion';
 import {
   Search,
   X,
   ArrowLeft,
-  Check,
   Globe,
   Loader2,
-  Plus,
-  Pin,
-  Layers,
-  ChefHat,
 } from 'lucide-react';
 import { db, generateId } from '@/lib/db/opencalory-db';
 import {
@@ -47,7 +44,10 @@ import {
   type SearchableEntry,
 } from '@/lib/foods/search-history';
 import { FoodRowSkeleton } from '@/components/ui/skeleton';
-import { runViewTransition, triggerHaptic } from '@/lib/motion';
+import { FoodSearchRow } from './food-search/food-search-row';
+import { FoodPortionPanel } from './food-search/food-portion-panel';
+import { FoodStagedTray } from './food-search/food-staged-tray';
+import { resolveDefaultFoodSelection } from './food-search/food-search-utils';
 import type {
   CustomRecipe,
   FoodItem,
@@ -67,56 +67,6 @@ export function clearOnlineSearchCache(): void {
   onlineQueryCache.clear();
 }
 
-function getFoodSourceBadge(food: FoodItem): {
-  label: 'Verified' | 'Regional' | 'Branded' | 'Custom';
-  toneClass: string;
-  showGlobe?: boolean;
-} {
-  if (food.source === 'custom_food' || food.source === 'custom_barcode') {
-    return {
-      label: 'Custom',
-      toneClass: 'bg-purple-500/15 text-purple-500',
-    };
-  }
-  if (food.accuracyTier === 1 || food.accuracyTier === 2) {
-    return {
-      label: 'Verified',
-      toneClass: 'bg-emerald-500/15 text-emerald-500',
-    };
-  }
-  if (
-    food.accuracyTier === 3 ||
-    (food.region && food.region !== 'GLOBAL' && food.source !== 'off')
-  ) {
-    return {
-      label: 'Regional',
-      toneClass: 'bg-sky-500/15 text-sky-500',
-    };
-  }
-  if (
-    food.accuracyTier === 4 ||
-    food.source === 'off' ||
-    food.source === 'fatsecret' ||
-    food.source === 'edamam' ||
-    food.source === 'nutritionix' ||
-    Boolean(food.brand)
-  ) {
-    return {
-      label: 'Branded',
-      toneClass: 'bg-[var(--macro-calories)]/15 text-[var(--macro-calories)]',
-      showGlobe:
-        food.source === 'off' ||
-        food.source === 'fatsecret' ||
-        food.source === 'edamam' ||
-        food.source === 'nutritionix',
-    };
-  }
-  return {
-    label: 'Verified',
-    toneClass: 'bg-emerald-500/15 text-emerald-500',
-  };
-}
-
 export interface FoodSearchDrawerProps {
   open: boolean;
   date?: string;
@@ -131,121 +81,6 @@ interface FoodSearchContentProps {
 }
 
 type HistoryTab = 'recents' | 'frequent' | 'pinned';
-
-function formatFoodBasisLabel(item: FoodItem): string {
-  const firstOpt = item.servingOptions?.find((o) => o.unit !== 'g' && o.unit !== 'ml');
-  if (item.basis === 'perServing') {
-    const count = item.servingSize > 0 ? item.servingSize : 1;
-    const unitLabel = formatPortionUnit(count, item.servingUnit || 'serving');
-    const gramNote = item.servingWeightGrams ? ` · ${item.servingWeightGrams}g` : '';
-    return `(per ${count} ${unitLabel}${gramNote})`;
-  }
-  if (item.basis === 'per100ml') {
-    return firstOpt ? `(per 100ml · 1 ${firstOpt.unit} = ${firstOpt.grams}ml)` : '(per 100ml)';
-  }
-  return firstOpt ? `(per 100g · 1 ${firstOpt.unit} = ${firstOpt.grams}g)` : '(per 100g)';
-}
-
-function formatRecipeBasisLabel(recipe: CustomRecipe): string {
-  const effectiveGrams =
-    typeof recipe.cookedWeightGrams === 'number' && recipe.cookedWeightGrams > 0
-      ? recipe.cookedWeightGrams
-      : recipe.totalGrams;
-  const defaultServings = Math.max(1, recipe.defaultServings || 1);
-  const perServingGrams =
-    effectiveGrams > 0 ? Math.round(effectiveGrams / defaultServings) : 0;
-
-  if (recipe.basis === 'perServing') {
-    return perServingGrams > 0
-      ? `(per 1 serving · ${perServingGrams}g)`
-      : '(per 1 serving)';
-  }
-  return perServingGrams > 0
-    ? `(per 100g · 1 serving = ${perServingGrams}g)`
-    : '(per 100g)';
-}
-
-function resolveDefaultFoodSelection(
-  food: FoodItem,
-  lastAmount?: number,
-  lastUnit?: string
-): { option: FoodServingOption | undefined; amount: number; unit: string } {
-  const options = getServingOptionsForFood(food);
-
-  if (
-    typeof lastAmount === 'number' &&
-    Number.isFinite(lastAmount) &&
-    lastAmount > 0 &&
-    typeof lastUnit === 'string' &&
-    lastUnit.trim().length > 0
-  ) {
-    const normLastUnit = formatPortionUnit(1, lastUnit).toLowerCase();
-    const matchedOpt = options.find(
-      (o) =>
-        o.unit.toLowerCase() === lastUnit.trim().toLowerCase() ||
-        formatPortionUnit(1, o.unit).toLowerCase() === normLastUnit
-    );
-    if (matchedOpt) {
-      return {
-        option: matchedOpt,
-        amount: lastAmount,
-        unit: formatPortionUnit(lastAmount, matchedOpt.unit),
-      };
-    }
-  }
-
-  const COUNTABLE_UNIT_PRIORITY = [
-    'large',
-    'pc',
-    'piece',
-    'medium',
-    'slice',
-    'fillet',
-    'breast',
-    'thigh',
-    'patty',
-    'pack',
-    'can',
-    'bottle',
-    'bar',
-    'scoop',
-    'order',
-    'serving',
-    'bowl',
-    'cup',
-  ];
-
-  const pickBestHouseholdOption = (): FoodServingOption | undefined => {
-    for (const unitKey of COUNTABLE_UNIT_PRIORITY) {
-      const found = options.find((o) => o.unit.toLowerCase() === unitKey);
-      if (found) return found;
-    }
-    return options.find((o) => o.unit !== 'g' && o.unit !== 'ml' && o.unit !== 'oz' && o.unit !== 'fl oz');
-  };
-
-  const preferred =
-    food.servingUnit !== 'g' && food.servingUnit !== 'ml'
-      ? options.find((o) => o.unit === food.servingUnit) ??
-        pickBestHouseholdOption() ??
-        options[0]
-      : pickBestHouseholdOption() ?? options[0];
-
-  const initialAmount =
-    preferred?.defaultAmount ??
-    (preferred?.unit === 'g' || preferred?.unit === 'ml'
-      ? food.servingSize || 100
-      : food.servingSize || 1);
-  const initialUnit = formatPortionUnit(
-    initialAmount,
-    preferred?.unit || food.servingUnit || 'g'
-  );
-
-  return {
-    option: preferred,
-    amount: initialAmount,
-    unit: initialUnit,
-  };
-}
 
 function FoodSearchContent({ date, mealSlot, onClose }: FoodSearchContentProps) {
   const storeDate = useLoggerStore((s) => s.activeDate);
@@ -701,15 +536,15 @@ function FoodSearchContent({ date, mealSlot, onClose }: FoodSearchContentProps) 
     [servingOptions, selectedOptionId]
   );
 
-  const handleSelectServingOption = (opt: FoodServingOption) => {
+  const handleSelectServingOption = useCallback((opt: FoodServingOption) => {
     setSelectedOptionId(opt.id);
     const nextAmount =
       opt.defaultAmount ?? (opt.unit === 'g' || opt.unit === 'ml' ? 100 : 1);
     setAmount(String(nextAmount));
     setUnit(formatPortionUnit(nextAmount, opt.unit));
-  };
+  }, []);
 
-  const handleSelectEntry = (entry: SearchableEntry) => {
+  const handleSelectEntry = useCallback((entry: SearchableEntry) => {
     const targetFood =
       entry.kind === 'recipe' ? recipeToFoodItem(entry.recipe) : entry.food;
     const { option: preferred, amount: initialAmount, unit: initialUnit } =
@@ -729,7 +564,7 @@ function FoodSearchContent({ date, mealSlot, onClose }: FoodSearchContentProps) 
       },
       { direction: 'forward' }
     );
-  };
+  }, []);
 
   const handleBackToResults = () => {
     triggerHaptic(6);
@@ -853,96 +688,105 @@ function FoodSearchContent({ date, mealSlot, onClose }: FoodSearchContentProps) 
     );
   };
 
-  const handleQuickLogEntry = async (
-    e: React.MouseEvent,
-    entry: SearchableEntry
-  ) => {
-    e.stopPropagation();
-    try {
-      const targetFood =
-        entry.kind === 'recipe' ? recipeToFoodItem(entry.recipe) : entry.food;
-      const { option, amount: quickAmount, unit: quickUnit } =
-        resolveDefaultFoodSelection(targetFood, entry.lastAmount, entry.lastUnit);
-      const scaled = scaleFoodByOption(targetFood, quickAmount, option);
+  const handleQuickLogEntry = useCallback(
+    async (e: React.MouseEvent, entry: SearchableEntry) => {
+      e.stopPropagation();
+      try {
+        const targetFood =
+          entry.kind === 'recipe' ? recipeToFoodItem(entry.recipe) : entry.food;
+        const { option, amount: quickAmount, unit: quickUnit } =
+          resolveDefaultFoodSelection(targetFood, entry.lastAmount, entry.lastUnit);
+        const scaled = scaleFoodByOption(targetFood, quickAmount, option);
 
-      const logEntry: FoodLogEntry = {
-        id: generateId(),
-        date: effectiveDate,
-        mealSlot: effectiveMealSlot,
-        foodId:
-          entry.kind === 'recipe' ? `recipe:${entry.recipe.id}` : entry.food.id,
-        name: entry.kind === 'recipe' ? entry.recipe.name : entry.food.name,
-        source: entry.kind === 'recipe' ? 'recipe' : entry.food.source,
-        amount: quickAmount,
-        unit: quickUnit,
-        nutritionSnapshot: {
-          calories: scaled.macros.calories,
-          protein: scaled.macros.protein,
-          carbs: scaled.macros.carbs,
-          fat: scaled.macros.fat,
-          fiber: scaled.macros.fiber,
-          micros: scaled.micros,
-        },
-        createdAt: Date.now(),
-      };
+        const logEntry: FoodLogEntry = {
+          id: generateId(),
+          date: effectiveDate,
+          mealSlot: effectiveMealSlot,
+          foodId:
+            entry.kind === 'recipe' ? `recipe:${entry.recipe.id}` : entry.food.id,
+          name: entry.kind === 'recipe' ? entry.recipe.name : entry.food.name,
+          source: entry.kind === 'recipe' ? 'recipe' : entry.food.source,
+          amount: quickAmount,
+          unit: quickUnit,
+          nutritionSnapshot: {
+            calories: scaled.macros.calories,
+            protein: scaled.macros.protein,
+            carbs: scaled.macros.carbs,
+            fat: scaled.macros.fat,
+            fiber: scaled.macros.fiber,
+            micros: scaled.micros,
+          },
+          createdAt: Date.now(),
+        };
 
-      await Promise.all([
-        db.foodLogs.add(logEntry),
-        entry.kind === 'food'
-          ? db.foodsCache.put(entry.food)
-          : Promise.resolve(),
-      ]);
+        await Promise.all([
+          db.foodLogs.add(logEntry),
+          entry.kind === 'food'
+            ? db.foodsCache.put(entry.food)
+            : Promise.resolve(),
+        ]);
 
-      await refreshHistoryAndPins();
+        await refreshHistoryAndPins();
 
-      showUndoToast({
-        message: `Logged ${logEntry.name} (${quickAmount} ${quickUnit})`,
-        onUndo: async () => {
-          await db.foodLogs.delete(logEntry.id);
-          await refreshHistoryAndPins();
-        },
-      });
+        showUndoToast({
+          message: `Logged ${logEntry.name} (${quickAmount} ${quickUnit})`,
+          onUndo: async () => {
+            await db.foodLogs.delete(logEntry.id);
+            await refreshHistoryAndPins();
+          },
+        });
 
-      triggerHaptic(10);
-    } catch (err) {
-      console.error('Failed to quick log food:', err);
-    }
-  };
+        triggerHaptic(10);
+      } catch (err) {
+        console.error('Failed to quick log food:', err);
+      }
+    },
+    [effectiveDate, effectiveMealSlot, showUndoToast]
+  );
 
-  const handleTogglePin = async (
-    e: React.MouseEvent,
-    entry: SearchableEntry
-  ) => {
-    e.stopPropagation();
-    const refId = entry.kind === 'recipe' ? entry.recipe.id : entry.food.id;
-    const pinKey = `${entry.kind}:${refId}`;
-    const wasPinned = pinnedIdSet.has(pinKey);
+  const handleTogglePin = useCallback(
+    async (e: React.MouseEvent, entry: SearchableEntry) => {
+      e.stopPropagation();
+      const refId = entry.kind === 'recipe' ? entry.recipe.id : entry.food.id;
+      const pinKey = `${entry.kind}:${refId}`;
+      const wasPinned = pinnedIdSet.has(pinKey);
 
-    if (wasPinned && entry.kind === 'food') {
-      const aliasPinIds = pinnedFoods
-        .filter(
-          (p) =>
-            p.kind === 'food' &&
-            (p.refId === refId || legacyAliasMap.get(p.refId) === refId)
-        )
-        .map((p) => p.id);
-      if (aliasPinIds.length > 0) {
-        await db.pinnedFoods.bulkDelete(aliasPinIds);
+      if (wasPinned && entry.kind === 'food') {
+        const aliasPinIds = pinnedFoods
+          .filter(
+            (p) =>
+              p.kind === 'food' &&
+              (p.refId === refId || legacyAliasMap.get(p.refId) === refId)
+          )
+          .map((p) => p.id);
+        if (aliasPinIds.length > 0) {
+          await db.pinnedFoods.bulkDelete(aliasPinIds);
+        } else {
+          await togglePinEntry(entry.kind, refId);
+        }
       } else {
         await togglePinEntry(entry.kind, refId);
       }
-    } else {
-      await togglePinEntry(entry.kind, refId);
-    }
 
-    triggerHaptic(6);
-    const pins = await db.pinnedFoods.toArray();
-    setPinnedFoods(pins);
-  };
+      triggerHaptic(6);
+      const pins = await db.pinnedFoods.toArray();
+      setPinnedFoods(pins);
+    },
+    [pinnedIdSet, pinnedFoods, legacyAliasMap]
+  );
 
-  const handleRemoveStagedItem = (id: string) => {
+  const handleRemoveStagedItem = useCallback((id: string) => {
     setStagedEntries((prev) => prev.filter((item) => item.id !== id));
-  };
+  }, []);
+
+  const handleClearStaged = useCallback(() => {
+    setStagedEntries([]);
+  }, []);
+
+  const handleSelectPreset = useCallback((nextAmount: string, nextUnit: string) => {
+    setAmount(nextAmount);
+    setUnit(nextUnit);
+  }, []);
 
   const handleLogAllStaged = async () => {
     if (stagedEntries.length === 0 || isLogging) return;
@@ -1111,273 +955,22 @@ function FoodSearchContent({ date, mealSlot, onClose }: FoodSearchContentProps) 
 
         {/* Portion Selector View */}
         {selectedFood ? (
-          (() => {
-            const metricUnit =
-              activeServingOption?.unit === 'ml' ||
-              selectedFood.basis === 'per100ml'
-                ? 'ml'
-                : 'g';
-            const isMetricMode =
-              !activeServingOption ||
-              activeServingOption.unit === 'g' ||
-              activeServingOption.unit === 'ml';
-            const countablePresets = [0.5, 1, 1.5, 2, 3];
-            const metricPresets = [50, 100, 150, 200, 250];
-
-            return (
-              <div
-                key={selectedFood.id}
-                className="pt-4 flex-1 overflow-y-auto overscroll-contain space-y-4 animate-panel-switch"
-              >
-                <div className="bg-surface-sub border border-border rounded-2xl p-4 space-y-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs font-semibold text-foreground">
-                      Portion Amount
-                    </span>
-                    <span className="text-[10px] text-muted-foreground tabular-nums">
-                      {activeServingOption && !isMetricMode
-                        ? `Basis: 1 ${activeServingOption.unit}${
-                            activeServingOption.grams > 0
-                              ? ` (${activeServingOption.grams}g)`
-                              : ''
-                          }`
-                        : `Basis: ${selectedFood.servingSize || 100} ${
-                            selectedFood.servingUnit || 'g'
-                          }`}
-                    </span>
-                  </div>
-
-                  {/* Serving Unit Selector Pills (ONLY when countable options apply) */}
-                  {servingOptions.length > 1 && (
-                    <div
-                      role="group"
-                      aria-label="Serving unit options"
-                      className="flex flex-wrap items-center gap-1.5"
-                    >
-                      {servingOptions.map((opt) => {
-                        const isActive = activeServingOption?.id === opt.id;
-                        return (
-                          <button
-                            key={opt.id}
-                            type="button"
-                            onClick={() => handleSelectServingOption(opt)}
-                            aria-pressed={isActive}
-                            className={`tactile-press px-2.5 py-1 text-[11px] font-semibold rounded-full border ${
-                              isActive
-                                ? 'bg-foreground text-background border-foreground shadow-xs'
-                                : 'bg-card text-muted-foreground border-border hover:text-foreground'
-                            }`}
-                          >
-                            {opt.label}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-
-                  <div className="flex items-center gap-2">
-                    <div className="flex-1">
-                      <input
-                        aria-label="Portion amount"
-                        type="number"
-                        step="any"
-                        min="0"
-                        value={amount}
-                        onChange={(e) => handleAmountChange(e.target.value)}
-                        className="w-full px-3 py-2 text-base font-semibold tabular-nums rounded-xl bg-card border border-border focus:outline-none focus:ring-2 focus:ring-ring text-foreground"
-                      />
-                    </div>
-                    <div className="w-24">
-                      <input
-                        aria-label="Portion unit"
-                        type="text"
-                        value={unit}
-                        onChange={(e) => setUnit(e.target.value)}
-                        className="w-full px-3 py-2 text-base sm:text-xs font-medium rounded-xl bg-card border border-border focus:outline-none focus:ring-2 focus:ring-ring text-foreground text-center"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Quick Portion Presets */}
-                  <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      {isMetricMode
-                        ? metricPresets.map((preset) => (
-                            <button
-                              key={preset}
-                              type="button"
-                              onClick={() => {
-                                setAmount(String(preset));
-                                setUnit(metricUnit);
-                              }}
-                              className={`tactile-press px-2.5 py-1 text-[11px] font-semibold rounded-full ${
-                                amount === String(preset) && unit === metricUnit
-                                  ? 'bg-foreground text-background shadow-xs'
-                                  : 'bg-card text-muted-foreground hover:text-foreground'
-                              }`}
-                            >
-                              {preset}
-                              {metricUnit}
-                            </button>
-                          ))
-                        : countablePresets.map((preset) => {
-                            const presetUnit = formatPortionUnit(
-                              preset,
-                              activeServingOption.unit
-                            );
-                            return (
-                              <button
-                                key={preset}
-                                type="button"
-                                onClick={() => {
-                                  setAmount(String(preset));
-                                  setUnit(presetUnit);
-                                }}
-                                className={`tactile-press px-2.5 py-1 text-[11px] font-semibold rounded-full ${
-                                  parsedAmount === preset
-                                    ? 'bg-foreground text-background shadow-xs'
-                                    : 'bg-card text-muted-foreground hover:text-foreground'
-                                }`}
-                              >
-                                {preset} {presetUnit}
-                              </button>
-                            );
-                          })}
-                    </div>
-                    {!isMetricMode &&
-                      scaledNutrition?.effectiveGrams !== undefined && (
-                        <span className="text-[11px] text-muted-foreground tabular-nums">
-                          &asymp; {scaledNutrition.effectiveGrams}g
-                        </span>
-                      )}
-                  </div>
-                </div>
-
-                {/* Scaled Macro Summary */}
-                {scaledNutrition && (
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between px-1">
-                      <span className="text-xs font-semibold text-foreground">
-                        Scaled Nutrition
-                      </span>
-                      <span className="text-xs font-bold text-[var(--macro-calories)] tabular-nums">
-                        {scaledNutrition.macros.calories} kcal
-                      </span>
-                    </div>
-                    <div className="grid grid-cols-4 gap-2 text-center">
-                      <div className="bg-surface-sub border border-border rounded-xl p-2">
-                        <span className="text-[10px] text-[var(--macro-protein)] font-semibold block">
-                          Protein
-                        </span>
-                        <span className="text-xs font-semibold tabular-nums text-foreground">
-                          {scaledNutrition.macros.protein}g
-                        </span>
-                      </div>
-                      <div className="bg-surface-sub border border-border rounded-xl p-2">
-                        <span className="text-[10px] text-[var(--macro-carbs)] font-semibold block">
-                          Carbs
-                        </span>
-                        <span className="text-xs font-semibold tabular-nums text-foreground">
-                          {scaledNutrition.macros.carbs}g
-                        </span>
-                      </div>
-                      <div className="bg-surface-sub border border-border rounded-xl p-2">
-                        <span className="text-[10px] text-[var(--macro-fat)] font-semibold block">
-                          Fat
-                        </span>
-                        <span className="text-xs font-semibold tabular-nums text-foreground">
-                          {scaledNutrition.macros.fat}g
-                        </span>
-                      </div>
-                      <div className="bg-surface-sub border border-border rounded-xl p-2">
-                        <span className="text-[10px] text-[var(--macro-fiber)] font-semibold block">
-                          Fiber
-                        </span>
-                        <span className="text-xs font-semibold tabular-nums text-foreground">
-                          {scaledNutrition.macros.fiber}g
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Micronutrients Pill Row (if any available) */}
-                    {Object.keys(scaledNutrition.micros).length > 0 && (
-                      <div className="bg-surface-sub/50 border border-border rounded-xl p-2.5 text-[10px] text-muted-foreground flex flex-wrap gap-x-3 gap-y-1">
-                        {scaledNutrition.micros.potassiumMg !== undefined && (
-                          <span>
-                            Potassium:{' '}
-                            <strong className="text-foreground tabular-nums">
-                              {scaledNutrition.micros.potassiumMg}mg
-                            </strong>
-                          </span>
-                        )}
-                        {scaledNutrition.micros.sodiumMg !== undefined && (
-                          <span>
-                            Sodium:{' '}
-                            <strong className="text-foreground tabular-nums">
-                              {scaledNutrition.micros.sodiumMg}mg
-                            </strong>
-                          </span>
-                        )}
-                        {scaledNutrition.micros.calciumMg !== undefined && (
-                          <span>
-                            Calcium:{' '}
-                            <strong className="text-foreground tabular-nums">
-                              {scaledNutrition.micros.calciumMg}mg
-                            </strong>
-                          </span>
-                        )}
-                        {scaledNutrition.micros.ironMg !== undefined && (
-                          <span>
-                            Iron:{' '}
-                            <strong className="text-foreground tabular-nums">
-                              {scaledNutrition.micros.ironMg}mg
-                            </strong>
-                          </span>
-                        )}
-                        {scaledNutrition.micros.magnesiumMg !== undefined && (
-                          <span>
-                            Magnesium:{' '}
-                            <strong className="text-foreground tabular-nums">
-                              {scaledNutrition.micros.magnesiumMg}mg
-                            </strong>
-                          </span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Confirm Log & Multi-Add Staging Buttons */}
-                <div className="pt-2 flex flex-col sm:flex-row gap-2">
-                  <button
-                    type="button"
-                    onClick={handleStageAndAddAnother}
-                    disabled={isLogging || parsedAmount <= 0}
-                    className="tactile-press flex-1 py-2.5 px-4 rounded-full bg-surface-sub border border-border text-foreground font-semibold text-xs hover:bg-accent disabled:opacity-50 flex items-center justify-center gap-1.5"
-                  >
-                    <Layers className="w-3.5 h-3.5" aria-hidden="true" />
-                    <span>Stage &amp; Add Another</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleLogFood}
-                    disabled={isLogging || parsedAmount <= 0}
-                    className="tactile-press flex-1 py-2.5 px-4 rounded-full bg-foreground text-background font-semibold text-xs hover:opacity-90 disabled:opacity-50 flex items-center justify-center gap-1.5 shadow-xs"
-                  >
-                    {isLogging ? (
-                      <Loader2
-                        className="w-3.5 h-3.5 animate-spin"
-                        aria-hidden="true"
-                      />
-                    ) : (
-                      <Check className="w-3.5 h-3.5" aria-hidden="true" />
-                    )}
-                    <span>Log Food</span>
-                  </button>
-                </div>
-              </div>
-            );
-          })()
+          <FoodPortionPanel
+            selectedFood={selectedFood}
+            servingOptions={servingOptions}
+            activeServingOption={activeServingOption}
+            amount={amount}
+            unit={unit}
+            parsedAmount={parsedAmount}
+            scaledNutrition={scaledNutrition}
+            isLogging={isLogging}
+            onSelectServingOption={handleSelectServingOption}
+            onAmountChange={handleAmountChange}
+            onUnitChange={setUnit}
+            onSelectPreset={handleSelectPreset}
+            onStageAndAddAnother={handleStageAndAddAnother}
+            onLogFood={handleLogFood}
+          />
         ) : (
           /* Search View */
           <div className="pt-3 flex-1 flex flex-col min-h-0 space-y-2.5">
@@ -1490,127 +1083,21 @@ function FoodSearchContent({ date, mealSlot, onClose }: FoodSearchContentProps) 
               {displayedEntries.length > 0 ? (
                 <>
                   {displayedEntries.map((entry, idx) => {
-                    const isRecipe = entry.kind === 'recipe';
-                    const itemId = isRecipe ? entry.recipe.id : entry.food.id;
-                    const itemName = isRecipe
-                      ? entry.recipe.name
-                      : entry.food.name;
-                    const itemBrand = isRecipe ? undefined : entry.food.brand;
-                    const itemRegion = isRecipe ? undefined : entry.food.region;
-                    const badge = isRecipe ? null : getFoodSourceBadge(entry.food);
-                    const nutrients = isRecipe
-                      ? entry.recipe.nutrientsPerBasis
-                      : entry.food.nutrientsPerBasis;
-                    const basisLabel = isRecipe
-                      ? formatRecipeBasisLabel(entry.recipe)
-                      : formatFoodBasisLabel(entry.food);
+                    const itemId =
+                      entry.kind === 'recipe' ? entry.recipe.id : entry.food.id;
                     const pinKey = `${entry.kind}:${itemId}`;
-                    const isPinned = pinnedIdSet.has(pinKey);
-
                     return (
-                      <div
+                      <FoodSearchRow
                         key={pinKey}
-                        data-highlighted={
-                          highlightedIndex === idx ? 'true' : undefined
-                        }
-                        style={{ animationDelay: `${Math.min(idx, 8) * 25}ms` }}
-                        onClick={() => handleSelectEntry(entry)}
-                        className={`tactile-press stagger-item w-full text-left p-3 rounded-xl border group flex items-center justify-between gap-2.5 cursor-pointer ${
-                          highlightedIndex === idx
-                            ? 'bg-accent border-border-focus'
-                            : 'bg-surface-sub hover:bg-accent border-border hover:border-border-focus'
-                        }`}
-                      >
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="text-xs font-semibold text-foreground line-clamp-1 group-hover:text-foreground">
-                              {itemName}
-                            </span>
-                            {itemRegion === 'PH' && (
-                              <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded-md font-semibold bg-emerald-500/15 text-emerald-500 shrink-0">
-                                PH
-                              </span>
-                            )}
-                            {isRecipe ? (
-                              <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded-md font-semibold bg-[var(--macro-fiber)]/15 text-[var(--macro-fiber)] shrink-0 inline-flex items-center gap-1">
-                                <ChefHat
-                                  className="w-2.5 h-2.5"
-                                  aria-hidden="true"
-                                />
-                                RECIPE
-                              </span>
-                            ) : badge ? (
-                              <span
-                                className={`text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded-md font-medium shrink-0 inline-flex items-center gap-1 ${badge.toneClass}`}
-                              >
-                                {badge.showGlobe && (
-                                  <Globe
-                                    className="w-2.5 h-2.5"
-                                    aria-hidden="true"
-                                  />
-                                )}
-                                {badge.label}
-                              </span>
-                            ) : null}
-                            {entry.lastAmount !== undefined &&
-                              entry.lastUnit && (
-                                <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-card border border-border text-muted-foreground tabular-nums">
-                                  Last: {entry.lastAmount} {entry.lastUnit}
-                                </span>
-                              )}
-                          </div>
-                          {itemBrand && (
-                            <p className="text-[10px] text-muted-foreground truncate mt-0.5">
-                              {itemBrand}
-                            </p>
-                          )}
-                          <div className="flex items-center flex-wrap gap-x-2 gap-y-0.5 mt-1 text-[11px] text-muted-foreground tabular-nums">
-                            <span className="text-[var(--macro-calories)] font-semibold">
-                              {nutrients.calories} kcal
-                            </span>
-                            <span>&bull;</span>
-                            <span className="text-[var(--macro-protein)]">
-                              P: {nutrients.protein}g
-                            </span>
-                            <span className="text-[var(--macro-carbs)]">
-                              C: {nutrients.carbs}g
-                            </span>
-                            <span className="text-[var(--macro-fat)]">
-                              F: {nutrients.fat}g
-                            </span>
-                            <span className="text-[10px] text-muted-foreground/70">
-                              {basisLabel}
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Per-Row Pin & 1-Tap Quick-Log Actions */}
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <button
-                            type="button"
-                            onClick={(e) => void handleTogglePin(e, entry)}
-                            aria-label={
-                              isPinned ? `Unpin ${itemName}` : `Pin ${itemName}`
-                            }
-                            aria-pressed={isPinned}
-                            className={`touch-target p-1.5 rounded-full border transition-colors ${
-                              isPinned
-                                ? 'bg-foreground text-background border-foreground'
-                                : 'bg-card text-muted-foreground border-border hover:text-foreground'
-                            }`}
-                          >
-                            <Pin className="w-3.5 h-3.5" aria-hidden="true" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={(e) => void handleQuickLogEntry(e, entry)}
-                            aria-label={`Quick log ${itemName}`}
-                            className="touch-target p-1.5 rounded-full bg-card border border-border text-muted-foreground hover:bg-foreground hover:text-background hover:border-foreground transition-colors"
-                          >
-                            <Plus className="w-4 h-4" aria-hidden="true" />
-                          </button>
-                        </div>
-                      </div>
+                        entry={entry}
+                        index={idx}
+                        isHighlighted={highlightedIndex === idx}
+                        isPinned={pinnedIdSet.has(pinKey)}
+                        animateEntry={!query.trim()}
+                        onSelect={handleSelectEntry}
+                        onTogglePin={handleTogglePin}
+                        onQuickLog={handleQuickLogEntry}
+                      />
                     );
                   })}
                   {query.trim() &&
@@ -1697,67 +1184,14 @@ function FoodSearchContent({ date, mealSlot, onClose }: FoodSearchContentProps) 
         )}
 
         {/* Sticky Multi-Add Staging Tray */}
-        {stagedEntries.length > 0 && (
-          <div
-            data-testid="multi-add-tray"
-            className="mt-3 pt-2.5 border-t border-border flex flex-col gap-2 shrink-0"
-          >
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
-              {stagedEntries.map((item) => (
-                <span
-                  key={item.id}
-                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-surface-sub border border-border text-[11px] text-foreground shrink-0 tabular-nums"
-                >
-                  <span className="max-w-[120px] truncate font-medium">
-                    {item.name}
-                  </span>
-                  <span className="text-muted-foreground">
-                    ({item.amount}
-                    {item.unit === 'g' || item.unit === 'ml'
-                      ? item.unit
-                      : ` ${item.unit}`}
-                    )
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveStagedItem(item.id)}
-                    aria-label={`Remove staged ${item.name}`}
-                    className="text-muted-foreground hover:text-foreground ml-0.5"
-                  >
-                    <X className="w-3 h-3" aria-hidden="true" />
-                  </button>
-                </span>
-              ))}
-            </div>
-            <div className="flex items-center justify-between gap-2 bg-surface-sub border border-border rounded-2xl px-3 py-2">
-              <div className="text-xs font-semibold text-foreground tabular-nums">
-                {stagedEntries.length}{' '}
-                {stagedEntries.length === 1 ? 'item' : 'items'} &middot;{' '}
-                <span className="text-[var(--macro-calories)]">
-                  {totalStagedCalories} kcal
-                </span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => setStagedEntries([])}
-                  aria-label="Clear staged items"
-                  className="tactile-press px-2.5 py-1 rounded-full text-[11px] font-medium text-muted-foreground hover:text-foreground"
-                >
-                  Clear
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void handleLogAllStaged()}
-                  disabled={isLogging}
-                  className="tactile-press px-3.5 py-1.5 rounded-full bg-foreground text-background text-xs font-semibold hover:opacity-90 disabled:opacity-50"
-                >
-                  Log All
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        <FoodStagedTray
+          stagedEntries={stagedEntries}
+          totalStagedCalories={totalStagedCalories}
+          isLogging={isLogging}
+          onRemoveItem={handleRemoveStagedItem}
+          onClearAll={handleClearStaged}
+          onLogAll={() => void handleLogAllStaged()}
+        />
       </motion.div>
     </motion.div>
   );
