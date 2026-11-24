@@ -1,7 +1,15 @@
 import 'fake-indexeddb/auto';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { parseOffProduct, searchOffFoods } from '../off-adapter';
+import {
+  CORE_OFF_REGION_QUOTAS,
+  isOffCacheUndersized,
+  offFoodRepoAdapter,
+} from '../../../../scripts/catalog-adapters/off-foodrepo';
 import { lookupBarcodeWaterfall, useBarcodeLookup, type BarcodeLookupResult } from '@/hooks/use-barcode-lookup';
 import { GET as offRouteHandler } from '@/app/api/off/[barcode]/route';
 import { GET as offSearchRouteHandler } from '@/app/api/off/search/route';
@@ -540,6 +548,96 @@ describe('Open Food Facts Adapter & Barcode Waterfall', () => {
       expect(hits[0].id).toBe('off:4800016644801');
       expect(hits[0].region).toBe('PH');
       expect(hits[0].servingOptions?.[0].unit).toBe('pack');
+    });
+  });
+
+  describe('OFF Catalog Adapter Quotas & Undersized-Cache Refresh', () => {
+    const tempDirs: string[] = [];
+
+    afterEach(() => {
+      while (tempDirs.length > 0) {
+        const dir = tempDirs.pop()!;
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    test('CORE_OFF_REGION_QUOTAS totals 115k-140k with every region <= 15% of total', () => {
+      const entries = Object.entries(CORE_OFF_REGION_QUOTAS);
+      expect(entries.length).toBe(24);
+      const total = entries.reduce((sum, [, cap]) => sum + cap, 0);
+      expect(total).toBeGreaterThanOrEqual(115_000);
+      expect(total).toBeLessThanOrEqual(140_000);
+      expect(CORE_OFF_REGION_QUOTAS.US / total).toBeLessThanOrEqual(0.15);
+      for (const [, cap] of entries) {
+        expect(cap / total).toBeLessThanOrEqual(0.15);
+      }
+    });
+
+    test('isOffCacheUndersized detects < 50% of targetTotal and returns false at >= 50%', async () => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'off-cache-test-'));
+      tempDirs.push(dir);
+
+      const smallFile = path.join(dir, 'small.jsonl');
+      fs.writeFileSync(smallFile, Array.from({ length: 5 }, (_, i) => `{"code":"${i}"}`).join('\n') + '\n');
+      expect(await isOffCacheUndersized(smallFile, 125_000)).toBe(true);
+
+      const justBelowHalf = path.join(dir, 'below-half.jsonl');
+      fs.writeFileSync(
+        justBelowHalf,
+        Array.from({ length: 49 }, (_, i) => `{"code":"${i}"}`).join('\n') + '\n'
+      );
+      expect(await isOffCacheUndersized(justBelowHalf, 100)).toBe(true);
+
+      const halfFile = path.join(dir, 'half.jsonl');
+      fs.writeFileSync(
+        halfFile,
+        Array.from({ length: 50 }, (_, i) => `{"code":"${i}"}`).join('\n') + '\n'
+      );
+      expect(await isOffCacheUndersized(halfFile, 100)).toBe(false);
+
+      expect(await isOffCacheUndersized(path.join(dir, 'missing.jsonl'), 100)).toBe(true);
+    });
+
+    test('offFoodRepoAdapter.load skips refresh when offlineOnly and refreshes undersized cache when online', async () => {
+      const cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'off-adapter-load-'));
+      tempDirs.push(cacheDir);
+      const offDir = path.join(cacheDir, 'off');
+      fs.mkdirSync(offDir, { recursive: true });
+
+      const sampleRecord = JSON.stringify({
+        code: '4800016644801',
+        product_name: 'Sample Oatmeal',
+        countries_tags: ['en:philippines'],
+        nutriments: {
+          'energy-kcal_100g': 380,
+          proteins_100g: 13,
+          carbohydrates_100g: 66,
+          fat_100g: 7,
+          fiber_100g: 10,
+        },
+      });
+      fs.writeFileSync(path.join(offDir, 'off-regional-products.jsonl'), `${sampleRecord}\n`);
+
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+        new Response('Service Unavailable', { status: 503 })
+      );
+
+      const offlineItems = await offFoodRepoAdapter.load({
+        tier: 'core',
+        cacheDir,
+        offlineOnly: true,
+      });
+      expect(fetchSpy).not.toHaveBeenCalled();
+      expect(offlineItems).toHaveLength(1);
+
+      const onlineItems = await offFoodRepoAdapter.load({
+        tier: 'core',
+        cacheDir,
+        offlineOnly: false,
+        timeoutMs: 1000,
+      });
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      expect(onlineItems).toHaveLength(1);
     });
   });
 });

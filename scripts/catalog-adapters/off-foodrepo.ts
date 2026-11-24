@@ -25,35 +25,35 @@ const FIXED_TIMESTAMP = 1700000000000;
  */
 export const CORE_OFF_REGION_QUOTAS: Record<string, number> = {
   // SEA
-  PH: 3000,
-  SG: 1500,
-  MY: 1500,
-  ID: 1500,
-  TH: 1500,
-  VN: 1200,
+  PH: 7000,
+  SG: 3500,
+  MY: 3500,
+  ID: 3500,
+  TH: 3500,
+  VN: 2500,
   // East Asia
-  JP: 3000,
-  KR: 2000,
-  TW: 1200,
-  HK: 1000,
+  JP: 7000,
+  KR: 5000,
+  TW: 3000,
+  HK: 2500,
   // Europe
-  GB: 3500,
-  FR: 3500,
-  DE: 3500,
-  ES: 2000,
-  IT: 2000,
-  NL: 1500,
+  GB: 9000,
+  FR: 9000,
+  DE: 9000,
+  ES: 6000,
+  IT: 6000,
+  NL: 4500,
   // Oceania
-  AU: 2500,
-  NZ: 1200,
+  AU: 6000,
+  NZ: 3000,
   // Canada, India, LatAm
-  CA: 2500,
-  IN: 2000,
-  MX: 1500,
-  BR: 1500,
+  CA: 6000,
+  IN: 5000,
+  MX: 4000,
+  BR: 4000,
   // US & fallback
-  US: 4000,
-  GLOBAL: 2000,
+  US: 10000,
+  GLOBAL: 6000,
 };
 
 const COUNTRY_TAG_TO_ISO: Record<string, string> = {
@@ -399,7 +399,7 @@ async function fetchRegionalOffToJsonl(
   const keptLines: string[] = [];
 
   const controller = new AbortController();
-  const maxStreamMs = Math.max(timeoutMs, 150_000);
+  const maxStreamMs = Math.max(timeoutMs, 900_000);
   let stopRequested = false;
   let activeRl: readline.Interface | null = null;
   let activeGunzip: zlib.Gunzip | null = null;
@@ -551,7 +551,7 @@ async function fetchRegionalOffToJsonl(
       keptLines.push(JSON.stringify(compact));
       regionCounts.set(region, cur + 1);
 
-      if (keptLines.length % 5000 === 0) {
+      if (keptLines.length % 10_000 === 0) {
         console.log(`[off]   kept ${keptLines.length} / ${maxTotal} (scanned ${scanned})...`);
       }
     }
@@ -579,6 +579,41 @@ async function fetchRegionalOffToJsonl(
   return true;
 }
 
+/**
+ * Streams line count of a cached OFF JSONL file and returns true if it does not exist
+ * or contains fewer non-empty lines than 50% of `targetTotal`.
+ */
+export async function isOffCacheUndersized(
+  filePath: string,
+  targetTotal: number
+): Promise<boolean> {
+  if (!fs.existsSync(filePath)) return true;
+  const threshold = Math.floor(targetTotal * 0.5);
+  if (threshold <= 0) return false;
+
+  let lines = 0;
+  const stream = fs.createReadStream(filePath, { encoding: 'utf8' });
+  const rl = readline.createInterface({
+    input: stream,
+    crlfDelay: Infinity,
+  });
+
+  try {
+    for await (const line of rl) {
+      if (line.trim().length === 0) continue;
+      lines++;
+      if (lines >= threshold) {
+        return false;
+      }
+    }
+  } finally {
+    rl.close();
+    stream.destroy();
+  }
+
+  return lines < threshold;
+}
+
 export const offFoodRepoAdapter: CatalogAdapter = {
   id: 'off-foodrepo',
   name: 'Open Food Facts (ODbL) & FoodRepo (CC BY 4.0)',
@@ -587,6 +622,8 @@ export const offFoodRepoAdapter: CatalogAdapter = {
     const results: CatalogFoodInput[] = [];
     const offDir = path.join(options.cacheDir, 'off');
     const foodRepoDir = path.join(options.cacheDir, 'foodrepo');
+    const regionalPath = path.join(offDir, 'off-regional-products.jsonl');
+    const maxTotal = Object.values(CORE_OFF_REGION_QUOTAS).reduce((a, b) => a + b, 0);
 
     let hasOffJsonl =
       fs.existsSync(offDir) &&
@@ -594,9 +631,18 @@ export const offFoodRepoAdapter: CatalogAdapter = {
         .readdirSync(offDir)
         .some((f) => f.toLowerCase().endsWith('.jsonl') || f.toLowerCase().endsWith('.ndjson'));
 
-    if (!hasOffJsonl && !options.offlineOnly) {
-      const regionalPath = path.join(offDir, 'off-regional-products.jsonl');
-      hasOffJsonl = await fetchRegionalOffToJsonl(regionalPath, options.timeoutMs ?? 20_000);
+    if (!options.offlineOnly) {
+      if (!hasOffJsonl) {
+        hasOffJsonl = await fetchRegionalOffToJsonl(regionalPath, options.timeoutMs ?? 20_000);
+      } else if (
+        fs.existsSync(regionalPath) &&
+        (await isOffCacheUndersized(regionalPath, maxTotal))
+      ) {
+        console.log(
+          `[off] Existing regional cache at ${regionalPath} is undersized (<50% of ${maxTotal}) — refreshing...`
+        );
+        await fetchRegionalOffToJsonl(regionalPath, options.timeoutMs ?? 20_000);
+      }
     }
 
     if (hasOffJsonl && fs.existsSync(offDir)) {
