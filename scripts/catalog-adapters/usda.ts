@@ -1,16 +1,19 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import type { Micronutrients, MacroNutrients } from '@/types/nutrition';
+import readline from 'node:readline';
+import type { FoodServingOption, Micronutrients, MacroNutrients } from '@/types/nutrition';
 import type { UsdaFoodPayload, UsdaNutrientEntry } from '@/lib/foods/usda-adapter';
 import type { CatalogFoodInput } from '@/lib/foods/catalog-schema';
 import { cleanFoodDisplayName, generateFoodAliases } from '@/lib/foods/name-normalizer';
 import { extractUsdaPortions, enrichServingOptions } from '@/lib/foods/portion-enrichment';
 import { normalizeBarcode } from '@/lib/foods/dedup';
+import { parseHouseholdServingText } from '@/lib/nutrition/scaling';
 import {
   type AdapterLoadOptions,
   type CatalogAdapter,
   computeSearchRank,
+  downloadStreamToCache,
   downloadToCache,
   extractZipFile,
   passesMacroQualityGate,
@@ -19,12 +22,16 @@ import {
 
 export type UsdaDatasetKind = 'foundation' | 'sr_legacy' | 'fndds' | 'branded';
 
+export const USDA_BRANDED_MAX_ITEMS = 25_000;
+
 const FOUNDATION_ZIP_URL =
   'https://fdc.nal.usda.gov/fdc-datasets/FoodData_Central_foundation_food_json_2024-10-31.zip';
 const SR_LEGACY_ZIP_URL =
   'https://fdc.nal.usda.gov/fdc-datasets/FoodData_Central_sr_legacy_food_json_2018-04.zip';
 const FNDDS_ZIP_URL =
   'https://fdc.nal.usda.gov/fdc-datasets/FoodData_Central_survey_food_json_2024-10-31.zip';
+const BRANDED_CSV_ZIP_URL =
+  'https://fdc.nal.usda.gov/fdc-datasets/FoodData_Central_branded_food_csv_2024-10-31.zip';
 
 const FIXED_TIMESTAMP = 1700000000000;
 
@@ -311,9 +318,444 @@ async function loadUsdaZipDataset(
   }
 }
 
+function parseCsvLine(line: string): string[] {
+  const fields: string[] = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (i + 1 < line.length && line[i + 1] === '"') {
+          current += '"';
+          i++;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        current += ch;
+      }
+    } else if (ch === '"') {
+      inQuotes = true;
+    } else if (ch === ',') {
+      fields.push(current);
+      current = '';
+    } else if (ch !== '\r') {
+      current += ch;
+    }
+  }
+  fields.push(current);
+  return fields;
+}
+
+function buildCsvHeaderMap(headerLine: string): Map<string, number> {
+  const cleaned = headerLine.startsWith('\uFEFF') ? headerLine.slice(1) : headerLine;
+  const cols = parseCsvLine(cleaned);
+  const map = new Map<string, number>();
+  for (let i = 0; i < cols.length; i++) {
+    map.set(cols[i].trim().toLowerCase(), i);
+  }
+  return map;
+}
+
+function findBrandedCsvFiles(
+  dir: string
+): { brandedFood: string; food: string; foodNutrient: string } | null {
+  if (!fs.existsSync(dir)) return null;
+
+  const candidateDirs: string[] = [dir];
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (entry.isDirectory()) {
+      candidateDirs.push(path.join(dir, entry.name));
+    }
+  }
+
+  for (const d of candidateDirs) {
+    const brandedFood = path.join(d, 'branded_food.csv');
+    const food = path.join(d, 'food.csv');
+    const foodNutrient = path.join(d, 'food_nutrient.csv');
+    if (fs.existsSync(brandedFood) && fs.existsSync(food) && fs.existsSync(foodNutrient)) {
+      return { brandedFood, food, foodNutrient };
+    }
+  }
+  return null;
+}
+
+function normalizeBrandNameKey(brand: string | undefined, description: string): string {
+  const b = (brand || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  const d = description.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  return `${b}::${d}`;
+}
+
+interface BrandedMeta {
+  brand?: string;
+  barcode: string;
+  category?: string;
+  servingSize: number;
+  servingUnit: string;
+  householdText?: string;
+  description?: string;
+}
+
+interface BrandedNutrients {
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  fiber: number;
+  sodiumMg?: number;
+  sugarG?: number;
+  saturatedFatG?: number;
+}
+
+/**
+ * Streams USDA FoodData Central Branded CSV files (`branded_food.csv`, `food.csv`,
+ * `food_nutrient.csv`) in 3 bounded passes without loading large CSVs into RAM.
+ */
+export async function parseUsdaBrandedCsvDir(
+  dir: string,
+  maxItems = USDA_BRANDED_MAX_ITEMS
+): Promise<CatalogFoodInput[]> {
+  if (maxItems <= 0) return [];
+  const files = findBrandedCsvFiles(dir);
+  if (!files) return [];
+
+  const candidateCap = maxItems * 2;
+  const candidates = new Map<number, BrandedMeta>();
+
+  // Pass 1: stream branded_food.csv
+  {
+    const stream = fs.createReadStream(files.brandedFood, { encoding: 'utf8' });
+    const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
+    let headerMap: Map<string, number> | null = null;
+    try {
+      for await (const line of rl) {
+        if (!headerMap) {
+          headerMap = buildCsvHeaderMap(line);
+          continue;
+        }
+        if (!line.trim()) continue;
+        const cols = parseCsvLine(line);
+        const fdcIdIdx = headerMap.get('fdc_id');
+        const upcIdx = headerMap.get('gtin_upc');
+        const servingSizeIdx = headerMap.get('serving_size');
+        if (fdcIdIdx === undefined || upcIdx === undefined || servingSizeIdx === undefined) {
+          break;
+        }
+
+        const fdcId = Number(cols[fdcIdIdx]);
+        if (!Number.isInteger(fdcId) || fdcId <= 0 || candidates.has(fdcId)) continue;
+
+        const barcode = normalizeBarcode(cols[upcIdx]);
+        if (!barcode) continue;
+
+        const servingSize = Number(cols[servingSizeIdx]);
+        if (!Number.isFinite(servingSize) || servingSize <= 0) continue;
+
+        const servingUnitIdx = headerMap.get('serving_size_unit');
+        const servingUnitRaw = servingUnitIdx !== undefined ? (cols[servingUnitIdx] || '').trim() : '';
+        const servingUnitLower = servingUnitRaw.toLowerCase();
+        if (
+          servingUnitLower !== '' &&
+          servingUnitLower !== 'g' &&
+          servingUnitLower !== 'grm' &&
+          servingUnitLower !== 'ml'
+        ) {
+          continue;
+        }
+
+        const brandNameIdx = headerMap.get('brand_name');
+        const brandOwnerIdx = headerMap.get('brand_owner');
+        const brandRaw = (
+          (brandNameIdx !== undefined ? cols[brandNameIdx] : '') ||
+          (brandOwnerIdx !== undefined ? cols[brandOwnerIdx] : '') ||
+          ''
+        ).trim();
+
+        const categoryIdx = headerMap.get('branded_food_category');
+        const categoryRaw = categoryIdx !== undefined ? (cols[categoryIdx] || '').trim() : '';
+
+        const householdIdx = headerMap.get('household_serving_fulltext');
+        const householdRaw = householdIdx !== undefined ? (cols[householdIdx] || '').trim() : '';
+
+        candidates.set(fdcId, {
+          ...(brandRaw ? { brand: brandRaw } : {}),
+          barcode,
+          ...(categoryRaw ? { category: categoryRaw } : {}),
+          servingSize,
+          servingUnit: servingUnitLower === 'ml' ? 'ml' : 'g',
+          ...(householdRaw ? { householdText: householdRaw } : {}),
+        });
+
+        if (candidates.size >= candidateCap) {
+          break;
+        }
+      }
+    } finally {
+      rl.close();
+      stream.destroy();
+    }
+  }
+
+  if (candidates.size === 0) return [];
+
+  // Pass 2: stream food.csv, attach description and deduplicate normalized brand+name
+  const seenBrandNames = new Set<string>();
+  {
+    const stream = fs.createReadStream(files.food, { encoding: 'utf8' });
+    const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
+    let headerMap: Map<string, number> | null = null;
+    try {
+      for await (const line of rl) {
+        if (!headerMap) {
+          headerMap = buildCsvHeaderMap(line);
+          continue;
+        }
+        if (!line.trim()) continue;
+        const cols = parseCsvLine(line);
+        const fdcIdIdx = headerMap.get('fdc_id');
+        const descIdx = headerMap.get('description');
+        if (fdcIdIdx === undefined || descIdx === undefined) break;
+
+        const fdcId = Number(cols[fdcIdIdx]);
+        const meta = candidates.get(fdcId);
+        if (!meta) continue;
+
+        const description = (cols[descIdx] || '').trim();
+        if (!description) {
+          candidates.delete(fdcId);
+          continue;
+        }
+
+        const key = normalizeBrandNameKey(meta.brand, description);
+        if (seenBrandNames.has(key)) {
+          candidates.delete(fdcId);
+          continue;
+        }
+
+        seenBrandNames.add(key);
+        meta.description = description;
+      }
+    } finally {
+      rl.close();
+      stream.destroy();
+    }
+  }
+
+  for (const [fdcId, meta] of candidates) {
+    if (!meta.description) {
+      candidates.delete(fdcId);
+    }
+  }
+
+  if (candidates.size === 0) return [];
+
+  // Pass 3: stream food_nutrient.csv for surviving fdc_ids
+  const nutrientsMap = new Map<number, BrandedNutrients>();
+  {
+    const stream = fs.createReadStream(files.foodNutrient, { encoding: 'utf8' });
+    const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
+    let headerMap: Map<string, number> | null = null;
+    try {
+      for await (const line of rl) {
+        if (!headerMap) {
+          headerMap = buildCsvHeaderMap(line);
+          continue;
+        }
+        if (!line.trim()) continue;
+        const cols = parseCsvLine(line);
+        const fdcIdIdx = headerMap.get('fdc_id');
+        const nutrientIdIdx = headerMap.get('nutrient_id');
+        const amountIdx = headerMap.get('amount');
+        if (fdcIdIdx === undefined || nutrientIdIdx === undefined || amountIdx === undefined) {
+          break;
+        }
+
+        const fdcId = Number(cols[fdcIdIdx]);
+        if (!candidates.has(fdcId)) continue;
+
+        const nutrientId = Number(cols[nutrientIdIdx]);
+        const amount = Number(cols[amountIdx]);
+        if (!Number.isFinite(amount) || amount < 0) continue;
+
+        let entry = nutrientsMap.get(fdcId);
+        if (!entry) {
+          entry = { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 };
+          nutrientsMap.set(fdcId, entry);
+        }
+
+        switch (nutrientId) {
+          case 1008:
+            entry.calories = amount;
+            break;
+          case 1003:
+            entry.protein = amount;
+            break;
+          case 1005:
+            entry.carbs = amount;
+            break;
+          case 1004:
+            entry.fat = amount;
+            break;
+          case 1079:
+            entry.fiber = amount;
+            break;
+          case 1093:
+            entry.sodiumMg = round2(amount);
+            break;
+          case 2000:
+            entry.sugarG = round2(amount);
+            break;
+          case 1258:
+            entry.saturatedFatG = round2(amount);
+            break;
+        }
+      }
+    } finally {
+      rl.close();
+      stream.destroy();
+    }
+  }
+
+  // Emit up to maxItems CatalogFoodInput records
+  const results: CatalogFoodInput[] = [];
+  for (const [fdcId, meta] of candidates) {
+    if (results.length >= maxItems) break;
+    if (!meta.description) continue;
+
+    const rawNutrients = nutrientsMap.get(fdcId);
+    if (!rawNutrients) continue;
+
+    const nutrientsPerBasis: MacroNutrients = {
+      calories: round2(rawNutrients.calories),
+      protein: round2(rawNutrients.protein),
+      carbs: round2(rawNutrients.carbs),
+      fat: round2(rawNutrients.fat),
+      fiber: round2(rawNutrients.fiber),
+    };
+
+    if (!passesMacroQualityGate(nutrientsPerBasis, 3)) {
+      continue;
+    }
+
+    const cleanName = cleanFoodDisplayName(meta.description, meta.brand);
+    if (!cleanName) continue;
+
+    const aliases = generateFoodAliases(meta.description, cleanName);
+    const basis = meta.servingUnit === 'ml' ? 'per100ml' : 'per100g';
+    const baseUnit: 'g' | 'ml' = basis === 'per100ml' ? 'ml' : 'g';
+    const servingWeightGrams = round2(meta.servingSize);
+
+    const existingOptions: FoodServingOption[] = [];
+    const parsedHousehold = meta.householdText
+      ? parseHouseholdServingText(meta.householdText)
+      : null;
+
+    if (
+      parsedHousehold &&
+      parsedHousehold.count > 0 &&
+      parsedHousehold.unit &&
+      parsedHousehold.unit !== 'g' &&
+      parsedHousehold.unit !== 'ml'
+    ) {
+      const perUnitGrams = round2(meta.servingSize / parsedHousehold.count);
+      if (perUnitGrams > 0) {
+        existingOptions.push({
+          id: parsedHousehold.unit,
+          label: `${parsedHousehold.unit} (${perUnitGrams}${baseUnit})`,
+          unit: parsedHousehold.unit,
+          grams: perUnitGrams,
+          defaultAmount: 1,
+        });
+      }
+    } else if (servingWeightGrams !== 100) {
+      existingOptions.push({
+        id: 'serving',
+        label: `serving (${servingWeightGrams}${baseUnit})`,
+        unit: 'serving',
+        grams: servingWeightGrams,
+        defaultAmount: 1,
+      });
+    }
+
+    const servingOptions = enrichServingOptions({
+      name: cleanName,
+      category: meta.category,
+      basis,
+      existingOptions,
+      servingWeightGrams,
+    });
+
+    const micros: Micronutrients = {};
+    if (rawNutrients.sodiumMg !== undefined) micros.sodiumMg = rawNutrients.sodiumMg;
+    if (rawNutrients.sugarG !== undefined) micros.sugarG = rawNutrients.sugarG;
+    if (rawNutrients.saturatedFatG !== undefined) {
+      micros.saturatedFatG = rawNutrients.saturatedFatG;
+    }
+
+    const canonicalId = `usda:${fdcId}`;
+    const record: CatalogFoodInput = {
+      id: canonicalId,
+      barcode: meta.barcode,
+      source: 'usda',
+      sourceProvider: 'usda_branded',
+      accuracyTier: 3,
+      region: 'US',
+      ...(meta.category ? { category: meta.category } : {}),
+      name: cleanName,
+      ...(meta.brand ? { brand: meta.brand } : {}),
+      ...(aliases.length > 0 ? { aliases } : {}),
+      basis,
+      servingSize: 100,
+      servingUnit: baseUnit,
+      servingWeightGrams,
+      servingOptions,
+      nutrientsPerBasis,
+      micronutrientsPerBasis: micros,
+      updatedAt: FIXED_TIMESTAMP,
+      legacyIds: [`staple:${fdcId}`, canonicalId],
+    };
+
+    record.searchRank = computeSearchRank(record);
+    results.push(record);
+  }
+
+  return results;
+}
+
+async function loadUsdaBrandedDataset(
+  usdaCacheDir: string,
+  options: AdapterLoadOptions
+): Promise<CatalogFoodInput[]> {
+  const brandedDir = path.join(usdaCacheDir, 'branded');
+  try {
+    if (!findBrandedCsvFiles(brandedDir)) {
+      const zipPath = path.join(usdaCacheDir, 'branded_csv.zip');
+      const downloaded = await downloadStreamToCache(BRANDED_CSV_ZIP_URL, zipPath, {
+        offlineOnly: options.offlineOnly,
+        timeoutMs: options.timeoutMs ?? 300_000,
+      });
+      if (!downloaded) return [];
+      if (!extractZipFile(downloaded, brandedDir)) return [];
+    }
+
+    const records = await parseUsdaBrandedCsvDir(brandedDir, USDA_BRANDED_MAX_ITEMS);
+    if (records.length > 0) {
+      console.log(`[usda] Parsed ${records.length} records from branded CSV slice`);
+    }
+    return records;
+  } catch (err) {
+    console.warn(
+      `[usda] Failed loading branded CSV slice: ${err instanceof Error ? err.message : String(err)}`
+    );
+    return [];
+  }
+}
+
 export const usdaAdapter: CatalogAdapter = {
   id: 'usda',
-  name: 'USDA FoodData Central (Foundation, SR Legacy, FNDDS)',
+  name: 'USDA FoodData Central (Foundation, SR Legacy, FNDDS, Branded)',
   license: 'CC0-1.0 / Public Domain',
   async load(options: AdapterLoadOptions): Promise<CatalogFoodInput[]> {
     const usdaCacheDir = path.join(options.cacheDir, 'usda');
@@ -352,6 +794,8 @@ export const usdaAdapter: CatalogAdapter = {
       options
     );
 
-    return [...foundation, ...srLegacy, ...fndds];
+    const branded = await loadUsdaBrandedDataset(usdaCacheDir, options);
+
+    return [...foundation, ...srLegacy, ...fndds, ...branded];
   },
 };

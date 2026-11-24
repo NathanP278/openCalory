@@ -1,6 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
+import type { ReadableStream as NodeWebReadableStream } from 'node:stream/web';
 import type { MacroNutrients } from '@/types/nutrition';
 import type { CatalogFoodInput } from '@/lib/foods/catalog-schema';
 
@@ -206,6 +209,58 @@ export async function downloadToCache(
   } catch (err) {
     console.warn(
       `[catalog] Could not download ${url}: ${err instanceof Error ? err.message : String(err)}`
+    );
+    return null;
+  }
+}
+
+/**
+ * Streams a remote URL directly to disk with timeout and atomic rename so large archives
+ * never buffer in RAM. Returns `destPath` on success or `null` if unavailable / offlineOnly.
+ */
+export async function downloadStreamToCache(
+  url: string,
+  destPath: string,
+  options?: { offlineOnly?: boolean; timeoutMs?: number }
+): Promise<string | null> {
+  if (fs.existsSync(destPath) && fs.statSync(destPath).size > 0) {
+    return destPath;
+  }
+  if (options?.offlineOnly) {
+    return null;
+  }
+
+  fs.mkdirSync(path.dirname(destPath), { recursive: true });
+  const timeoutMs = options?.timeoutMs ?? DEFAULT_FETCH_TIMEOUT_MS;
+  const tmpPath = `${destPath}.tmp`;
+
+  try {
+    const response = await fetch(url, {
+      signal: AbortSignal.timeout(timeoutMs),
+      headers: {
+        'User-Agent': 'MacroAI-CatalogCompiler/1.0 (+https://github.com/opencalory)',
+      },
+    });
+    if (!response.ok || !response.body) {
+      console.warn(`[catalog] Stream download failed (${response.status}) for ${url}`);
+      return null;
+    }
+
+    const nodeStream = Readable.fromWeb(response.body as unknown as NodeWebReadableStream);
+    const writeStream = fs.createWriteStream(tmpPath);
+    await pipeline(nodeStream, writeStream);
+    fs.renameSync(tmpPath, destPath);
+    return destPath;
+  } catch (err) {
+    try {
+      if (fs.existsSync(tmpPath)) {
+        fs.unlinkSync(tmpPath);
+      }
+    } catch {
+      // Ignore temp cleanup errors
+    }
+    console.warn(
+      `[catalog] Could not stream-download ${url}: ${err instanceof Error ? err.message : String(err)}`
     );
     return null;
   }
