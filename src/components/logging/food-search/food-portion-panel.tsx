@@ -2,8 +2,10 @@
 
 import React from 'react';
 import { Check, Layers, Loader2 } from 'lucide-react';
-import { formatPortionUnit, type ScaledNutrition } from '@/lib/nutrition/scaling';
+import { formatPortionUnit, type scaleFoodByOption } from '@/lib/nutrition/scaling';
 import type { FoodItem, FoodServingOption } from '@/types/nutrition';
+
+export type ScaledNutritionResult = ReturnType<typeof scaleFoodByOption>;
 
 export interface FoodPortionPanelProps {
   selectedFood: FoodItem;
@@ -12,7 +14,7 @@ export interface FoodPortionPanelProps {
   amount: string;
   unit: string;
   parsedAmount: number;
-  scaledNutrition: ScaledNutrition | null;
+  scaledNutrition: ScaledNutritionResult | null;
   isLogging: boolean;
   onSelectServingOption: (opt: FoodServingOption) => void;
   onAmountChange: (val: string) => void;
