@@ -8,6 +8,8 @@ import {
   type AdapterLoadOptions,
   type CatalogAdapter,
   computeSearchRank,
+  downloadStreamToCache,
+  extractZipFile,
   passesMacroQualityGate,
   round2,
 } from './types';
@@ -31,6 +33,7 @@ export interface NationalTableDefinition {
   region: string;
   license: string;
   fileCandidates: string[];
+  downloadUrl?: string;
 }
 
 export const NATIONAL_TABLE_SOURCES: NationalTableDefinition[] = [
@@ -40,6 +43,8 @@ export const NATIONAL_TABLE_SOURCES: NationalTableDefinition[] = [
     region: 'CA',
     license: 'Open Government Licence – Canada',
     fileCandidates: ['cnf.json', 'cnf.csv'],
+    downloadUrl:
+      'https://www.canada.ca/content/dam/hc-sc/migration/hc-sc/fn-an/alt_formats/zip/nutrition/fiche-nutri-data/cnf-fcen-csv.zip',
   },
   {
     id: 'cofid',
@@ -75,6 +80,8 @@ export const NATIONAL_TABLE_SOURCES: NationalTableDefinition[] = [
     region: 'FR',
     license: 'Licence Ouverte / Open Licence v2.0',
     fileCandidates: ['ciqual.json', 'ciqual.csv'],
+    downloadUrl:
+      'https://www.data.gouv.fr/fr/datasets/r/05a47412-0617-41b6-a958-1678f60a5f07',
   },
   {
     id: 'nevo',
@@ -196,8 +203,8 @@ export function parseNationalTableRows(
       ['potassiumMg', ['potassiumMg', 'potassium_mg', 'potassium']],
       ['calciumMg', ['calciumMg', 'calcium_mg', 'calcium']],
       ['ironMg', ['ironMg', 'iron_mg', 'iron']],
-      ['sugarG', ['sugarG', 'sugar_g', 'sugars']],
-      ['saturatedFatG', ['saturatedFatG', 'saturated_fat_g', 'saturated_fat']],
+      ['sugarG', ['sugarG', 'sugar_g', 'sugars', 'sugar']],
+      ['saturatedFatG', ['saturatedFatG', 'saturated_fat_g', 'saturated_fat', 'saturatedFat']],
       ['cholesterolMg', ['cholesterolMg', 'cholesterol_mg', 'cholesterol']],
     ];
     for (const [microKey, candidates] of microMap) {
@@ -373,6 +380,433 @@ export function parseNationalTableCsv(
   return rows;
 }
 
+type NormalizedNutrientField =
+  | 'calories'
+  | 'protein'
+  | 'carbs'
+  | 'fat'
+  | 'fiber'
+  | 'sodium'
+  | 'sugar'
+  | 'saturatedFat'
+  | 'calcium'
+  | 'iron'
+  | 'potassium';
+
+const CNF_NUTRIENT_CODE_MAP: Record<string, NormalizedNutrientField> = {
+  '208': 'calories',
+  '203': 'protein',
+  '205': 'carbs',
+  '204': 'fat',
+  '291': 'fiber',
+  '307': 'sodium',
+  '269': 'sugar',
+  '606': 'saturatedFat',
+  '301': 'calcium',
+  '303': 'iron',
+  '306': 'potassium',
+};
+
+const CNF_NUTRIENT_SYMBOL_MAP: Record<string, NormalizedNutrientField> = {
+  KCAL: 'calories',
+  PROT: 'protein',
+  CARB: 'carbs',
+  FAT: 'fat',
+  TDF: 'fiber',
+  NA: 'sodium',
+  TSUG: 'sugar',
+  FASAT: 'saturatedFat',
+  CA: 'calcium',
+  FE: 'iron',
+  K: 'potassium',
+};
+
+function findFileCaseInsensitive(dir: string, targetFilename: string): string | null {
+  if (!fs.existsSync(dir)) return null;
+  const targetLower = targetFilename.toLowerCase();
+
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return null;
+  }
+
+  for (const entry of entries) {
+    if (entry.isFile() && entry.name.toLowerCase() === targetLower) {
+      return path.join(dir, entry.name);
+    }
+  }
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const subDir = path.join(dir, entry.name);
+    let subEntries: fs.Dirent[];
+    try {
+      subEntries = fs.readdirSync(subDir, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const subEntry of subEntries) {
+      if (subEntry.isFile() && subEntry.name.toLowerCase() === targetLower) {
+        return path.join(subDir, subEntry.name);
+      }
+    }
+  }
+
+  return null;
+}
+
+function getFieldCaseInsensitive(row: Record<string, unknown>, candidates: string[]): string {
+  for (const candidate of candidates) {
+    if (row[candidate] !== undefined && row[candidate] !== null) {
+      return String(row[candidate]).trim();
+    }
+  }
+  const lowerCandidates = new Set(candidates.map((c) => c.toLowerCase()));
+  for (const [k, v] of Object.entries(row)) {
+    if (v !== undefined && v !== null && lowerCandidates.has(k.toLowerCase())) {
+      return String(v).trim();
+    }
+  }
+  return '';
+}
+
+/**
+ * Joins Health Canada Canadian Nutrient File (CNF) CSV tables (`FOOD NAME.csv`,
+ * `NUTRIENT NAME.csv`, `NUTRIENT AMOUNT.csv`, and optional `FOOD GROUP.csv`)
+ * into normalized row objects compatible with `parseNationalTableRows('cnf', rows)`.
+ */
+export function parseCnfCsvDir(dir: string): Record<string, unknown>[] {
+  const foodNamePath = findFileCaseInsensitive(dir, 'FOOD NAME.csv');
+  const nutrientNamePath = findFileCaseInsensitive(dir, 'NUTRIENT NAME.csv');
+  const nutrientAmountPath = findFileCaseInsensitive(dir, 'NUTRIENT AMOUNT.csv');
+
+  if (!foodNamePath || !nutrientNamePath || !nutrientAmountPath) {
+    return [];
+  }
+
+  const groupMap = new Map<string, string>();
+  const foodGroupPath = findFileCaseInsensitive(dir, 'FOOD GROUP.csv');
+  if (foodGroupPath) {
+    const groupRows = parseNationalTableCsv(fs.readFileSync(foodGroupPath, 'utf8'));
+    for (const row of groupRows) {
+      const groupId = getFieldCaseInsensitive(row, ['FoodGroupID', 'FoodGroupCode']);
+      const groupName = getFieldCaseInsensitive(row, ['FoodGroupName', 'FoodGroupNameF']);
+      if (groupId && groupName) {
+        groupMap.set(groupId, groupName);
+      }
+    }
+  }
+
+  const nutrientIdToField = new Map<string, NormalizedNutrientField>();
+  const nutrientNameRows = parseNationalTableCsv(fs.readFileSync(nutrientNamePath, 'utf8'));
+  for (const row of nutrientNameRows) {
+    const nutrientId = getFieldCaseInsensitive(row, ['NutrientID']);
+    if (!nutrientId) continue;
+    const nutrientCode = getFieldCaseInsensitive(row, ['NutrientCode']);
+    const nutrientSymbol = getFieldCaseInsensitive(row, ['NutrientSymbol']).toUpperCase();
+    const mapped =
+      CNF_NUTRIENT_CODE_MAP[nutrientCode] ??
+      CNF_NUTRIENT_SYMBOL_MAP[nutrientSymbol] ??
+      CNF_NUTRIENT_CODE_MAP[nutrientId];
+    if (mapped) {
+      nutrientIdToField.set(nutrientId, mapped);
+    }
+  }
+
+  const nutrientsByFood = new Map<string, Partial<Record<NormalizedNutrientField, number>>>();
+  const nutrientAmountRows = parseNationalTableCsv(fs.readFileSync(nutrientAmountPath, 'utf8'));
+  for (const row of nutrientAmountRows) {
+    const foodId = getFieldCaseInsensitive(row, ['FoodID']);
+    const nutrientId = getFieldCaseInsensitive(row, ['NutrientID']);
+    if (!foodId || !nutrientId) continue;
+    const field = nutrientIdToField.get(nutrientId) ?? CNF_NUTRIENT_CODE_MAP[nutrientId];
+    if (!field) continue;
+
+    const val = toNum(getFieldCaseInsensitive(row, ['NutrientValue']));
+    let entry = nutrientsByFood.get(foodId);
+    if (!entry) {
+      entry = {};
+      nutrientsByFood.set(foodId, entry);
+    }
+    entry[field] = val;
+  }
+
+  const foodNameRows = parseNationalTableCsv(fs.readFileSync(foodNamePath, 'utf8'));
+  const normalizedRows: Record<string, unknown>[] = [];
+  for (const row of foodNameRows) {
+    const foodId = getFieldCaseInsensitive(row, ['FoodID', 'FoodCode']);
+    const description = getFieldCaseInsensitive(row, ['FoodDescription', 'FoodDescriptionF']);
+    if (!foodId || !description) continue;
+
+    const groupId = getFieldCaseInsensitive(row, ['FoodGroupID']);
+    const category =
+      (groupId ? groupMap.get(groupId) : undefined) ??
+      (getFieldCaseInsensitive(row, ['FoodGroupName', 'Category']) || undefined);
+
+    const n = nutrientsByFood.get(foodId) ?? {};
+    normalizedRows.push({
+      id: foodId,
+      name: description,
+      ...(category ? { category } : {}),
+      calories: n.calories ?? 0,
+      protein: n.protein ?? 0,
+      carbs: n.carbs ?? 0,
+      fat: n.fat ?? 0,
+      fiber: n.fiber ?? 0,
+      sodium: n.sodium ?? 0,
+      sugar: n.sugar ?? 0,
+      saturatedFat: n.saturatedFat ?? 0,
+      calcium: n.calcium ?? 0,
+      iron: n.iron ?? 0,
+      potassium: n.potassium ?? 0,
+    });
+  }
+
+  return normalizedRows;
+}
+
+function normalizeHeader(header: string): string {
+  return header
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+}
+
+function parseCiqualNumber(val: unknown): number {
+  if (typeof val === 'number' && Number.isFinite(val)) return val;
+  if (typeof val !== 'string') return 0;
+  const trimmed = val.trim();
+  if (!trimmed) return 0;
+  const lower = trimmed.toLowerCase();
+  if (lower === '-' || lower === 'traces' || lower === 'tr' || lower === 'n' || lower === 'na') {
+    return 0;
+  }
+  if (trimmed.startsWith('<')) return 0;
+  const cleaned = trimmed.replace(/\s+/g, '').replace(',', '.');
+  const n = Number(cleaned);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function findCiqualHeader(
+  headers: Array<{ raw: string; norm: string }>,
+  predicates: Array<(norm: string) => boolean>
+): string | null {
+  for (const pred of predicates) {
+    const match = headers.find((h) => pred(h.norm));
+    if (match) return match.raw;
+  }
+  return null;
+}
+
+/**
+ * Parses semicolon- or tab-delimited ANSES-Ciqual CSV text (French or English headers)
+ * into normalized row objects compatible with `parseNationalTableRows('ciqual', rows)`.
+ * Rejects HTML error pages by returning `[]`.
+ */
+export function parseCiqualCsvText(text: string): Record<string, unknown>[] {
+  if (!text) return [];
+  const trimmedStart = text.trimStart();
+  if (
+    !trimmedStart ||
+    trimmedStart.startsWith('<') ||
+    trimmedStart.slice(0, 200).toLowerCase().includes('<html')
+  ) {
+    return [];
+  }
+
+  const rawRows = parseNationalTableCsv(text);
+  if (rawRows.length === 0) return [];
+
+  const headerMeta = Object.keys(rawRows[0]).map((raw) => ({
+    raw,
+    norm: normalizeHeader(raw),
+  }));
+
+  const idCol = findCiqualHeader(headerMeta, [
+    (h) => h === 'alim_code',
+    (h) => h === 'id' || h === 'code',
+  ]);
+  const nameCol = findCiqualHeader(headerMeta, [
+    (h) => h === 'alim_nom_eng',
+    (h) => h === 'alim_nom_fr',
+    (h) => h === 'name' || h === 'food_name',
+  ]);
+  if (!nameCol) return [];
+
+  const categoryCol = findCiqualHeader(headerMeta, [
+    (h) => h === 'alim_grp_nom_eng',
+    (h) => h === 'alim_grp_nom_fr',
+    (h) => h === 'alim_ssgrp_nom_eng',
+    (h) => h === 'alim_ssgrp_nom_fr',
+    (h) => h === 'category' || h === 'food_group',
+  ]);
+  const caloriesCol = findCiqualHeader(headerMeta, [
+    (h) => h.includes('kcal') && (h.includes('1169') || h.includes('reglement') || h.includes('regulation')),
+    (h) => h.includes('kcal'),
+    (h) => h === 'calories',
+  ]);
+  const proteinCol = findCiqualHeader(headerMeta, [
+    (h) => (h.startsWith('protein') || h.startsWith('proteine')) && h.includes('6.25'),
+    (h) => h.startsWith('protein') || h.startsWith('proteine'),
+  ]);
+  const carbsCol = findCiqualHeader(headerMeta, [
+    (h) => h.startsWith('carbohydrate') || h.startsWith('glucide') || h === 'carbs',
+  ]);
+  const fatCol = findCiqualHeader(headerMeta, [
+    (h) => (h.startsWith('fat') && !h.startsWith('fatty')) || h.startsWith('lipide') || h === 'total fat',
+  ]);
+  const fiberCol = findCiqualHeader(headerMeta, [
+    (h) => h.startsWith('fibre') || h.startsWith('fiber') || h.startsWith('dietary fib'),
+  ]);
+  const sodiumCol = findCiqualHeader(headerMeta, [(h) => h.startsWith('sodium')]);
+  const sugarCol = findCiqualHeader(headerMeta, [
+    (h) => h.startsWith('sugar') || h.startsWith('sucre'),
+  ]);
+  const satFatCol = findCiqualHeader(headerMeta, [
+    (h) =>
+      h.includes('saturated') ||
+      h.includes('satures') ||
+      h.startsWith('ag sat') ||
+      h.startsWith('fa sat'),
+  ]);
+  const calciumCol = findCiqualHeader(headerMeta, [(h) => h.startsWith('calcium')]);
+  const ironCol = findCiqualHeader(headerMeta, [
+    (h) => h.startsWith('iron') || h === 'fer' || h.startsWith('fer ') || h.startsWith('fer('),
+  ]);
+  const potassiumCol = findCiqualHeader(headerMeta, [(h) => h.startsWith('potassium')]);
+
+  const normalizedRows: Record<string, unknown>[] = [];
+  for (let i = 0; i < rawRows.length; i++) {
+    const row = rawRows[i];
+    const name = String(row[nameCol] ?? '').trim();
+    if (!name) continue;
+
+    const id = idCol ? String(row[idCol] ?? '').trim() || `${i + 1}` : `${i + 1}`;
+    const category = categoryCol ? String(row[categoryCol] ?? '').trim() || undefined : undefined;
+
+    normalizedRows.push({
+      id,
+      name,
+      ...(category ? { category } : {}),
+      calories: caloriesCol ? parseCiqualNumber(row[caloriesCol]) : 0,
+      protein: proteinCol ? parseCiqualNumber(row[proteinCol]) : 0,
+      carbs: carbsCol ? parseCiqualNumber(row[carbsCol]) : 0,
+      fat: fatCol ? parseCiqualNumber(row[fatCol]) : 0,
+      fiber: fiberCol ? parseCiqualNumber(row[fiberCol]) : 0,
+      sodium: sodiumCol ? parseCiqualNumber(row[sodiumCol]) : 0,
+      sugar: sugarCol ? parseCiqualNumber(row[sugarCol]) : 0,
+      saturatedFat: satFatCol ? parseCiqualNumber(row[satFatCol]) : 0,
+      calcium: calciumCol ? parseCiqualNumber(row[calciumCol]) : 0,
+      iron: ironCol ? parseCiqualNumber(row[ironCol]) : 0,
+      potassium: potassiumCol ? parseCiqualNumber(row[potassiumCol]) : 0,
+    });
+  }
+
+  return normalizedRows;
+}
+
+function writeJsonAtomic(destPath: string, data: unknown): void {
+  const tmpPath = `${destPath}.tmp`;
+  fs.writeFileSync(tmpPath, JSON.stringify(data), 'utf8');
+  fs.renameSync(tmpPath, destPath);
+}
+
+async function tryAutoDownloadNationalTable(
+  def: NationalTableDefinition,
+  nationalDir: string,
+  options: AdapterLoadOptions
+): Promise<string | null> {
+  if (!def.downloadUrl || options.offlineOnly) return null;
+
+  const destJson = path.join(nationalDir, `${def.id}.json`);
+  const timeoutMs = options.timeoutMs ?? 60_000;
+
+  try {
+    if (def.id === 'cnf') {
+      const zipPath = path.join(nationalDir, 'cnf-fcen-csv.zip');
+      const downloaded = await downloadStreamToCache(def.downloadUrl, zipPath, {
+        offlineOnly: options.offlineOnly,
+        timeoutMs,
+      });
+      if (!downloaded) return null;
+
+      // Validate ZIP magic bytes ('PK') before extraction so HTML error pages fail fast
+      const header = Buffer.alloc(2);
+      const fd = fs.openSync(downloaded, 'r');
+      let bytesRead = 0;
+      try {
+        bytesRead = fs.readSync(fd, header, 0, 2, 0);
+      } finally {
+        fs.closeSync(fd);
+      }
+      if (bytesRead < 2 || header[0] !== 0x50 || header[1] !== 0x4b) {
+        try {
+          fs.unlinkSync(downloaded);
+        } catch {
+          // Ignore cleanup errors
+        }
+        console.warn(
+          `[national-tables] Auto-downloaded ${def.id} payload is not a valid ZIP archive (possibly HTML error page) — skipping cache write.`
+        );
+        return null;
+      }
+
+      const extractDir = path.join(nationalDir, 'cnf-extracted');
+      const extracted = extractZipFile(downloaded, extractDir);
+      if (!extracted) {
+        try {
+          fs.unlinkSync(downloaded);
+        } catch {
+          // Ignore cleanup errors
+        }
+        return null;
+      }
+
+      const rows = parseCnfCsvDir(extractDir);
+      if (rows.length === 0) {
+        console.warn(`[national-tables] Auto-downloaded ${def.id} archive yielded 0 structured rows — skipping cache write.`);
+        return null;
+      }
+
+      writeJsonAtomic(destJson, rows);
+      return destJson;
+    }
+
+    if (def.id === 'ciqual') {
+      const rawCsvPath = path.join(nationalDir, 'ciqual-raw.csv');
+      const downloaded = await downloadStreamToCache(def.downloadUrl, rawCsvPath, {
+        offlineOnly: options.offlineOnly,
+        timeoutMs,
+      });
+      if (!downloaded) return null;
+
+      const rawText = fs.readFileSync(downloaded, 'utf8');
+      const rows = parseCiqualCsvText(rawText);
+      if (rows.length === 0) {
+        try {
+          fs.unlinkSync(downloaded);
+        } catch {
+          // Ignore cleanup errors
+        }
+        console.warn(`[national-tables] Auto-downloaded ${def.id} payload yielded 0 structured rows (possibly HTML error page) — skipping cache write.`);
+        return null;
+      }
+
+      writeJsonAtomic(destJson, rows);
+      return destJson;
+    }
+  } catch (err) {
+    console.warn(
+      `[national-tables] Auto-download failed for ${def.id}: ${err instanceof Error ? err.message : String(err)}`
+    );
+  }
+
+  return null;
+}
+
 export const nationalTablesAdapter: CatalogAdapter = {
   id: 'national-tables',
   name: 'National Food Composition Tables (CNF, CoFID, AUSNUT, MEXT, BLS, Ciqual, NEVO, Frida, Livsmedelsverket, TACO, INDB)',
@@ -382,20 +816,27 @@ export const nationalTablesAdapter: CatalogAdapter = {
     const results: CatalogFoodInput[] = [];
 
     if (!fs.existsSync(nationalDir)) {
-      console.log(
-        `[national-tables] No cached national table files in ${nationalDir} — skipping (place cached JSON/CSV files there to compile them).`
-      );
-      return results;
+      if (options.offlineOnly) {
+        console.log(
+          `[national-tables] No cached national table files in ${nationalDir} — skipping (place cached JSON/CSV files there to compile them).`
+        );
+        return results;
+      }
+      fs.mkdirSync(nationalDir, { recursive: true });
     }
 
     for (const def of NATIONAL_TABLE_SOURCES) {
       let foundFile: string | null = null;
       for (const candidate of def.fileCandidates) {
         const full = path.join(nationalDir, candidate);
-        if (fs.existsSync(full)) {
+        if (fs.existsSync(full) && fs.statSync(full).size > 0) {
           foundFile = full;
           break;
         }
+      }
+
+      if (!foundFile && def.downloadUrl && !options.offlineOnly) {
+        foundFile = await tryAutoDownloadNationalTable(def, nationalDir, options);
       }
 
       if (!foundFile) {
@@ -413,6 +854,11 @@ export const nationalTablesAdapter: CatalogAdapter = {
             : Array.isArray(parsed?.foods)
               ? parsed.foods
               : [];
+        } else if (def.id === 'ciqual') {
+          rows = parseCiqualCsvText(rawText);
+          if (rows.length === 0) {
+            rows = parseNationalTableCsv(rawText);
+          }
         } else {
           rows = parseNationalTableCsv(rawText);
         }

@@ -296,9 +296,13 @@ export async function runBuildFoodCatalogCli(argv: string[]): Promise<CatalogMan
     `[food-db:build] Compiled ${manifest.foodCount} deduplicated foods -> ${gzipOutPath} (${gzMb} MB gz, ${rawMb} MB raw, sha256=${manifest.sha256.slice(0, 12)}...)`
   );
 
-  if (args.tier === 'core' && manifest.gzipBytes > 15 * 1024 * 1024) {
+  if (args.tier === 'core' && manifest.gzipBytes > 42 * 1024 * 1024) {
     console.warn(
-      `[food-db:build] WARNING: Core .db.gz (${gzMb} MB) exceeds the 15 MB target budget!`
+      `[food-db:build] WARNING: Core .db.gz (${gzMb} MB) exceeds the 42 MB hard ceiling!`
+    );
+  } else if (args.tier === 'core' && manifest.gzipBytes > 35 * 1024 * 1024) {
+    console.warn(
+      `[food-db:build] WARNING: Core .db.gz (${gzMb} MB) exceeds the 35 MB target budget!`
     );
   }
 
