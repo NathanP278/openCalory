@@ -158,7 +158,9 @@ function FoodSearchContent({
   const onlineAbortRef = useRef<AbortController | null>(null);
   const resultsContainerRef = useRef<HTMLDivElement | null>(null);
   const savedScrollTopRef = useRef<number>(0);
-  const lastSettledScrollQueryRef = useRef<string>('');
+  const lastNormalizedQueryRef = useRef<string>(
+    (searchInitialQuery || '').trim().toLowerCase()
+  );
 
   // Initialize OPFS SQLite catalog and load bounded Dexie history/cache on mount
   useEffect(() => {
@@ -306,9 +308,14 @@ function FoodSearchContent({
       onlineAbortRef.current.abort();
     }
     const normKey = val.trim().toLowerCase();
-    if (!normKey) {
-      lastSettledScrollQueryRef.current = '';
+    if (normKey !== lastNormalizedQueryRef.current) {
+      lastNormalizedQueryRef.current = normKey;
       savedScrollTopRef.current = 0;
+      if (resultsContainerRef.current) {
+        resultsContainerRef.current.scrollTop = 0;
+      }
+    }
+    if (!normKey) {
       setCatalogResults([]);
       setCatalogSettledQuery('');
       setOnlineResults([]);
@@ -599,20 +606,6 @@ function FoodSearchContent({
       resultsContainerRef.current.scrollTop = savedScrollTopRef.current;
     }
   }, [selectedFood]);
-
-  // Reset results scroll to top when a different search query settles
-  useEffect(() => {
-    if (!catalogSettledQuery) return;
-    if (lastSettledScrollQueryRef.current === catalogSettledQuery) return;
-    const hadPreviousQuery = lastSettledScrollQueryRef.current !== '';
-    lastSettledScrollQueryRef.current = catalogSettledQuery;
-    if (hadPreviousQuery) {
-      savedScrollTopRef.current = 0;
-      if (!selectedFood && resultsContainerRef.current) {
-        resultsContainerRef.current.scrollTop = 0;
-      }
-    }
-  }, [catalogSettledQuery, selectedFood]);
 
   const handleAmountChange = (val: string) => {
     setAmount(val);
@@ -936,13 +929,19 @@ function FoodSearchContent({
         if (e.key === 'ArrowDown') {
           e.preventDefault();
           const len = state.displayedEntries.length;
-          setHighlightedIndex((prev) => (prev < len - 1 ? prev + 1 : 0));
+          setHighlightedIndex((prev) => {
+            const current = prev >= len ? len - 1 : prev;
+            return current < len - 1 ? current + 1 : 0;
+          });
           return;
         }
         if (e.key === 'ArrowUp') {
           e.preventDefault();
           const len = state.displayedEntries.length;
-          setHighlightedIndex((prev) => (prev > 0 ? prev - 1 : len - 1));
+          setHighlightedIndex((prev) => {
+            const current = prev >= len ? len - 1 : prev;
+            return current > 0 ? current - 1 : len - 1;
+          });
           return;
         }
         if (
@@ -1113,6 +1112,10 @@ function FoodSearchContent({
                       onClick={() => {
                         setActiveTab(tab.id);
                         setHighlightedIndex(-1);
+                        savedScrollTopRef.current = 0;
+                        if (resultsContainerRef.current) {
+                          resultsContainerRef.current.scrollTop = 0;
+                        }
                       }}
                       className={`tactile-press py-1.5 px-2.5 rounded-lg text-xs font-semibold transition-colors ${
                         isActive

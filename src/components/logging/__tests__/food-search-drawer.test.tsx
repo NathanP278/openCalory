@@ -1233,10 +1233,31 @@ describe('FoodSearchDrawer component', () => {
       expect(screen.getByText('Brown rice, medium-grain, cooked')).toBeInTheDocument();
       expect(screen.getByTestId('food-search-results').scrollTop).toBe(0);
     });
+
+    // Clearing search resets scrollTop to 0, and typing first search after scrolled history also resets scrollTop to 0
+    screen.getByTestId('food-search-results').scrollTop = 140;
+    fireEvent.change(screen.getByLabelText(/search foods/i), { target: { value: '' } });
+    expect(screen.getByTestId('food-search-results').scrollTop).toBe(0);
+
+    screen.getByTestId('food-search-results').scrollTop = 260;
+    fireEvent.change(screen.getByLabelText(/search foods/i), { target: { value: 'chicken' } });
+    await waitFor(() => {
+      expect(screen.getByText('Chicken breast, raw')).toBeInTheDocument();
+      expect(screen.getByTestId('food-search-results').scrollTop).toBe(0);
+    });
   });
 
-  test('mounts global keydown listener once across keystrokes and clamps highlightedIndex when results shrink', async () => {
+  test('mounts global keydown listener once across keystrokes and steps ArrowUp immediately after list shrinks', async () => {
     const addListenerSpy = vi.spyOn(window, 'addEventListener');
+    let resolveShrunk!: (res: { items: FoodItem[]; source: 'opfs' }) => void;
+    vi.mocked(clientCatalog.searchClientCatalog).mockImplementation((q: string) => {
+      if (q === 'a') {
+        return Promise.resolve({ items: mockCatalogFoods, source: 'opfs' });
+      }
+      return new Promise((resolve) => {
+        resolveShrunk = resolve;
+      });
+    });
 
     render(
       <FoodSearchDrawer
@@ -1253,25 +1274,33 @@ describe('FoodSearchDrawer component', () => {
 
     const keydownMounts = () =>
       addListenerSpy.mock.calls.filter(([type]) => type === 'keydown').length;
-    const initialCount = keydownMounts();
-    expect(initialCount).toBe(1);
-
-    const searchInput = screen.getByLabelText(/search foods/i);
-    fireEvent.change(searchInput, { target: { value: 'c' } });
-    fireEvent.change(searchInput, { target: { value: 'ch' } });
-    fireEvent.change(searchInput, { target: { value: 'chi' } });
-    fireEvent.change(searchInput, { target: { value: 'chick' } });
-
     expect(keydownMounts()).toBe(1);
 
-    // Highlight index 0 and ensure narrowing doesn't break keyboard selection
-    fireEvent.keyDown(window, { key: 'ArrowDown' });
+    const searchInput = screen.getByLabelText(/search foods/i);
+    fireEvent.change(searchInput, { target: { value: 'a' } });
     await waitFor(() => {
-      const highlighted = screen
-        .getByTestId('food-search-results')
-        .querySelectorAll('[data-highlighted="true"]');
-      expect(highlighted).toHaveLength(1);
+      expect(screen.getByText('Egg McMuffin')).toBeInTheDocument();
     });
+    expect(keydownMounts()).toBe(1);
+
+    // Start pending query that retains previous 3 results while user arrows down to index 2
+    fireEvent.change(searchInput, { target: { value: 'ab' } });
+    fireEvent.keyDown(window, { key: 'ArrowDown' }); // 0
+    fireEvent.keyDown(window, { key: 'ArrowDown' }); // 1
+    fireEvent.keyDown(window, { key: 'ArrowDown' }); // 2
+
+    // Settle with only 2 items while raw highlightedIndex is still 2
+    await act(async () => {
+      resolveShrunk({ items: mockCatalogFoods.slice(0, 2), source: 'opfs' });
+    });
+
+    // Pressing ArrowUp ONCE should immediately step from clamped index 1 -> index 0 (not stall on 2 -> 1)
+    fireEvent.keyDown(window, { key: 'ArrowUp' });
+    const rows = screen
+      .getByTestId('food-search-results')
+      .querySelectorAll('.food-search-row');
+    expect(rows[0].getAttribute('data-highlighted')).toBe('true');
+    expect(rows[1].getAttribute('data-highlighted')).toBeNull();
   });
 
   test('Review Focus #5: bounds mount Dexie foodLogs query via createdAt index and handles quick-log + Undo incrementally without full-table rescans', async () => {

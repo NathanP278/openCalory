@@ -407,4 +407,22 @@ describe('AppShell', () => {
       vi.useRealTimers();
     }
   });
+
+  it('suppresses PageTransitionStage initial opacity:0 fade on cold first mount without blocking route exits', async () => {
+    const motionMod = await import('@/lib/motion');
+    const envSpy = vi.spyOn(motionMod, 'isTestEnvironment').mockReturnValue(false);
+    try {
+      const { container } = render(
+        <AppShell>
+          <div>Cold Mount Content</div>
+        </AppShell>
+      );
+
+      const mainEl = container.querySelector('main');
+      expect(mainEl).not.toBeNull();
+      expect(mainEl?.style.opacity).not.toBe('0');
+    } finally {
+      envSpy.mockRestore();
+    }
+  });
 });

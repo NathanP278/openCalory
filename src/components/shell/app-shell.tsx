@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import dynamic from "next/dynamic";
 import { usePathname } from "next/navigation";
+import { AnimatePresence } from "motion/react";
 import { Lock, ShieldCheck, X } from "lucide-react";
 import { BottomNav } from "./bottom-nav";
 import { DesktopSidebar } from "./desktop-sidebar";
@@ -310,13 +311,15 @@ export function AppShell({ children, onQuickAction }: AppShellProps) {
       >
         {syncAuthLocked && <SyncAuthModal />}
 
-        <PageTransitionStage
-          routeKey={pathname}
-          direction={routeDirection}
-          className="flex-1 flex flex-col w-full"
-        >
-          {children}
-        </PageTransitionStage>
+        <AnimatePresence initial={false}>
+          <PageTransitionStage
+            routeKey={pathname}
+            direction={routeDirection}
+            className="flex-1 flex flex-col w-full"
+          >
+            {children}
+          </PageTransitionStage>
+        </AnimatePresence>
 
         {/* Floating Undo Toast */}
         <UndoToast />
