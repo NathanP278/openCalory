@@ -266,6 +266,12 @@ describe('scaling.ts oz, fl oz, and size-qualifier support', () => {
       count: 1,
       unit: 'extra large',
     });
+    expect(parseHouseholdServingText('1 1/2 cups')).toEqual({
+      count: 1.5,
+      unit: 'cup',
+    });
+    expect(buildCanonicalFoodKey('Olives, ripe')).toBe(buildCanonicalFoodKey('Olive, ripe'));
+    expect(buildCanonicalFoodKey('Garlic Cloves')).toBe(buildCanonicalFoodKey('Garlic Clove'));
     expect(formatPortionUnit(2, 'oz')).toBe('oz');
     expect(formatPortionUnit(8, 'fl oz')).toBe('fl oz');
     expect(formatPortionUnit(2, 'large')).toBe('large');

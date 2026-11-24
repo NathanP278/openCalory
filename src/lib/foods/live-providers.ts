@@ -947,8 +947,8 @@ export async function searchLiveProviders(
     ...(errors.length > 0 ? { partialError: errors.join('; ') } : {}),
   };
 
-  // Cache whenever at least one provider succeeded
-  if (providersUsed.length > 0) {
+  // Cache only when at least one provider succeeded with no partial errors
+  if (providersUsed.length > 0 && errors.length === 0) {
     setBoundedCache(searchCache, cacheKey, result);
   }
 

@@ -237,6 +237,16 @@ const HOUSEHOLD_UNIT_ALIASES: Record<string, string> = {
 };
 
 function parseLeadingCount(raw: string): { count: number; rest: string } | null {
+  const mixedFracMatch = raw.match(/^(\d+)\s+(\d+)\s*\/\s*(\d+)\s+(.+)$/);
+  if (mixedFracMatch) {
+    const whole = Number(mixedFracMatch[1]);
+    const num = Number(mixedFracMatch[2]);
+    const den = Number(mixedFracMatch[3]);
+    if (Number.isFinite(whole) && Number.isFinite(num) && Number.isFinite(den) && den > 0) {
+      return { count: whole + num / den, rest: mixedFracMatch[4].trim() };
+    }
+  }
+
   const fracMatch = raw.match(/^(\d+)\s*\/\s*(\d+)\s+(.+)$/);
   if (fracMatch) {
     const num = Number(fracMatch[1]);

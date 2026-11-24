@@ -285,7 +285,7 @@ function singularizeToken(token: string): string {
   if (token.endsWith('oes') && token.length > 4) {
     return token.slice(0, -2);
   }
-  if (token.endsWith('ves') && token.length > 4) {
+  if (/^(hal|loa|lea|cal|kni|shel|shea)ves$/.test(token)) {
     return `${token.slice(0, -3)}f`;
   }
   if (/(ches|shes|xes|zes)$/.test(token) && token.length > 4) {

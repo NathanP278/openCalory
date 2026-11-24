@@ -9,8 +9,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const { searchParams } = new URL(request.url);
   const q = (searchParams.get('q') ?? searchParams.get('query') ?? '').trim();
 
-  const rawLimit = Number(searchParams.get('limit') ?? '30');
-  const limit = Number.isFinite(rawLimit)
+  const limitParam = (searchParams.get('limit') ?? '').trim();
+  const rawLimit = limitParam ? Number(limitParam) : 30;
+  const limit = Number.isFinite(rawLimit) && rawLimit > 0
     ? Math.max(1, Math.min(60, Math.round(rawLimit)))
     : 30;
 

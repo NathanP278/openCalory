@@ -180,4 +180,18 @@ describe('FoodCatalogCard', () => {
     expect(cached.every((item) => item.source === 'custom_food')).toBe(true);
     expect(cached.map((item) => item.name).sort()).toEqual(['Pandesal', 'Taho']);
   });
+
+  it('shows a clear message when uploading an empty valid CSV file', async () => {
+    render(<FoodCatalogCard />);
+
+    const emptyCsv = 'name,calories,protein,carbs,fat\n';
+    const file = new File([emptyCsv], 'empty.csv', { type: 'text/csv' });
+    const input = screen.getByTestId('food-catalog-file-input');
+
+    fireEvent.change(input, { target: { files: [file] } });
+
+    await waitFor(() => {
+      expect(screen.getByText(/No foods found in file\./i)).toBeInTheDocument();
+    });
+  });
 });

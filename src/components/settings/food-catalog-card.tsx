@@ -245,6 +245,15 @@ export function FoodCatalogCard({ className }: FoodCatalogCardProps) {
               </div>
             )}
 
+            {feedback.importedCount === 0 &&
+              !feedback.fatalError &&
+              visibleErrors.length === 0 && (
+                <div className="p-2.5 rounded-xl flex items-center gap-2 text-xs bg-card text-muted-foreground">
+                  <AlertCircle className="w-4 h-4 shrink-0" aria-hidden="true" />
+                  <span>No foods found in file.</span>
+                </div>
+              )}
+
             {feedback.fatalError && (
               <div className="p-2.5 rounded-xl flex items-start gap-2 text-xs bg-card text-[var(--neutral-over)]">
                 <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />

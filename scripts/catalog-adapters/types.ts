@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import type { MacroNutrients } from '@/types/nutrition';
 import type { CatalogFoodInput } from '@/lib/foods/catalog-schema';
 
@@ -218,11 +218,11 @@ export async function downloadToCache(
 export function extractZipFile(zipPath: string, outputDir: string): boolean {
   fs.mkdirSync(outputDir, { recursive: true });
   try {
-    execSync(`tar -xf "${zipPath}" -C "${outputDir}"`, { stdio: 'pipe' });
+    execFileSync('tar', ['-xf', zipPath, '-C', outputDir], { stdio: 'pipe' });
     return true;
   } catch {
     try {
-      execSync(`unzip -q -o "${zipPath}" -d "${outputDir}"`, { stdio: 'pipe' });
+      execFileSync('unzip', ['-q', '-o', zipPath, '-d', outputDir], { stdio: 'pipe' });
       return true;
     } catch (err) {
       console.warn(

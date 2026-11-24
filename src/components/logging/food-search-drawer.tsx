@@ -618,7 +618,7 @@ function FoodSearchContent({ date, mealSlot, onClose }: FoodSearchContentProps) 
         }
       }
       const fallbackLocal = deduplicateSearchResults(cachedFoods, legacyAliasMap)
-        .filter((f) => !seenFoodIds.has(f.id))
+        .filter((f) => !seenFoodIds.has(f.id) && !seenFoodIds.has(legacyAliasMap.get(f.id) ?? f.id))
         .slice(0, 40)
         .map((food) => ({
           kind: 'food' as const,

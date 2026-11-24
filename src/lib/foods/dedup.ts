@@ -887,6 +887,13 @@ export function deduplicateSearchResults(
 
       slots[matchedIdx] = updatedSlot;
       registerSlot(matchedIdx, updatedSlot);
+      // Also bind the dropped loser's keys to matchedIdx for transitive 3-way dedup
+      if (loserSlot.canonicalId && loserSlot.canonicalId !== updatedSlot.canonicalId) {
+        pushSlotIndex(byCanonicalId, loserSlot.canonicalId, matchedIdx);
+      }
+      if (loserSlot.barcode && loserSlot.barcode !== updatedSlot.barcode) {
+        pushSlotIndex(byBarcode, loserSlot.barcode, matchedIdx);
+      }
     } else {
       const newIdx = slots.length;
       slots.push(incoming);

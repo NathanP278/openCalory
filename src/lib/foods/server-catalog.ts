@@ -141,6 +141,10 @@ export function resetServerCatalogCache(): void {
 
 export async function getActiveCatalogManifest(): Promise<CatalogManifest | null> {
   for (const dir of getCandidateCatalogDirs()) {
+    const gzipPath = path.join(dir, CATALOG_GZIP_FILENAME);
+    if (!(await fileExistsNonEmpty(gzipPath))) {
+      continue;
+    }
     const manifest = await readManifestFromDir(dir);
     if (manifest) {
       return manifest;
@@ -209,11 +213,11 @@ async function runFtsMatchQuery(
   if (!matchExpr) return [];
   try {
     const res = await client.execute({
-      sql: `SELECT f.*, bm25(foods_fts, 10.0, 5.0, 4.0, 1.0) AS fts_bm25
+      sql: `SELECT f.rowid, f.*, bm25(foods_fts, 10.0, 5.0, 4.0, 1.0) AS fts_bm25
             FROM foods_fts
             JOIN foods f ON f.rowid = foods_fts.rowid
             WHERE foods_fts MATCH ?
-            ORDER BY (bm25(foods_fts, 10.0, 5.0, 4.0, 1.0) - (f.search_rank * 0.05) + (f.accuracy_tier * 1.2)) ASC
+            ORDER BY (fts_bm25 - (f.search_rank * 0.05) + (f.accuracy_tier * 1.2)) ASC
             LIMIT ?`,
       args: [matchExpr, fetchLimit],
     });
@@ -337,19 +341,23 @@ export async function resolveServerLegacyIds(
   const client = await getCatalogClient();
   if (!client) return result;
 
-  const placeholders = uniqueIds.map(() => '?').join(', ');
-  const res = await client.execute({
-    sql: `SELECT a.legacy_id, f.*
-          FROM food_id_aliases a
-          JOIN foods f ON f.id = a.canonical_id
-          WHERE a.legacy_id IN (${placeholders})`,
-    args: uniqueIds,
-  });
+  const CHUNK_SIZE = 500;
+  for (let i = 0; i < uniqueIds.length; i += CHUNK_SIZE) {
+    const chunk = uniqueIds.slice(i, i + CHUNK_SIZE);
+    const placeholders = chunk.map(() => '?').join(', ');
+    const res = await client.execute({
+      sql: `SELECT a.legacy_id, f.rowid, f.*
+            FROM food_id_aliases a
+            JOIN foods f ON f.id = a.canonical_id
+            WHERE a.legacy_id IN (${placeholders})`,
+      args: chunk,
+    });
 
-  for (const row of res.rows) {
-    const legacyId = String(row.legacy_id ?? '');
-    if (legacyId) {
-      result.set(legacyId, catalogRowToFoodItem(toCatalogFoodRow(row)));
+    for (const row of res.rows) {
+      const legacyId = String(row.legacy_id ?? '');
+      if (legacyId) {
+        result.set(legacyId, catalogRowToFoodItem(toCatalogFoodRow(row)));
+      }
     }
   }
 
