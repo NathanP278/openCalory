@@ -7,8 +7,8 @@ Thanks for your interest in contributing to **openCalory**! Whether you are fixi
 Before making changes, please keep these core principles in mind:
 
 1. **Adherence neutrality:** Never use punitive red warning styling or shame-oriented messaging when a user exceeds calorie or macro targets. Over-target states should remain calm, analytical, and neutral (`+N` / `Surplus`).
-2. **Offline-first & local sovereignty:** Core logging, staples search, custom foods/recipes, trends, and backups must work locally in IndexedDB without requiring cloud accounts or external APIs.
-3. **Server-side secrets only:** API keys (`AI_API_KEY`, `TURSO_AUTH_TOKEN`, `SYNC_ACCESS_KEY`, `SHORTCUT_API_KEY`, `USDA_API_KEY`) must never be exposed to client bundles, `NEXT_PUBLIC_*` variables, or browser storage.
+2. **Offline-first & local sovereignty:** Core logging, offline SQLite FTS5 catalog search, custom foods/recipes, trends, and backups must work locally in IndexedDB and OPFS without requiring cloud accounts or external APIs.
+3. **Server-side secrets only:** API keys (`AI_API_KEY`, `TURSO_AUTH_TOKEN`, `SYNC_ACCESS_KEY`, `SHORTCUT_API_KEY`, `USDA_API_KEY`, and optional live food provider keys such as `FATSECRET_*`, `EDAMAM_*`, `NUTRITIONIX_*`) must never be exposed to client bundles, `NEXT_PUBLIC_*` variables, or browser storage.
 4. **Mobile-first ergonomics, desktop elasticity:** Logging flows should stay fast and thumb-friendly on phones while expanding cleanly into multi-column layouts on tablets and desktops.
 5. **Human-in-the-Loop (HITL) AI:** AI meal scans, label OCR, and meal ideas should always let the user inspect, adjust, or swap ingredients before logging.
 
@@ -40,7 +40,7 @@ Before making changes, please keep these core principles in mind:
    cp .env.example .env.local
    ```
 
-   All environment variables are optional for local development—the app works out of the box with IndexedDB, bundled food datasets, and a local SQLite sync database (`opencalory.db`).
+   All environment variables are optional for local development—the app works out of the box with IndexedDB, the bundled 10,500+ food SQLite FTS5 catalog, and a local SQLite sync database (`opencalory.db`).
 
 4. Start the development server:
 
@@ -66,6 +66,11 @@ npm run lint
 
 # Verify the production Next.js build succeeds
 npm run build
+
+# Rebuild or pull the offline SQLite FTS5 food catalog
+npm run food-db:build
+npm run food-db:build:expanded
+npm run food-db:pull
 ```
 
 ## Making Changes

@@ -1,8 +1,8 @@
 # Data Licenses & Attributions
 
-The compiled MacroAI / openCalory food catalog artifacts (`food-catalog.db` and `food-catalog.db.gz`, both Core and Expanded packs) are distributed under the **Open Database License (ODbL) v1.0** (<https://opendatacommons.org/licenses/odbl/1-0/>) because they combine and deduplicate open datasets including ODbL-licensed sources (OpenNutrition and Open Food Facts).
+The compiled openCalory food catalog artifacts (`food-catalog.db` and `food-catalog.db.gz`, both Core and Expanded packs) are distributed under the **Open Database License (ODbL) v1.0** (<https://opendatacommons.org/licenses/odbl/1-0/>) because they combine and deduplicate open datasets including ODbL-licensed sources (OpenNutrition and Open Food Facts).
 
-> **Commercial API Policy:** MacroAI NEVER scrapes, dumps, or compiles proprietary/commercial APIs (such as FatSecret, Edamam, or Nutritionix) into offline catalog artifacts.
+> **Commercial API Policy:** openCalory NEVER scrapes, dumps, or compiles proprietary/commercial APIs (such as FatSecret, Edamam, or Nutritionix) into offline catalog artifacts.
 
 ## Upstream Dataset Attributions
 
@@ -25,7 +25,7 @@ The compiled MacroAI / openCalory food catalog artifacts (`food-catalog.db` and 
 | **India Anuvaad INDB / NIN IFCT** | National Institute of Nutrition (ICMR) / Anuvaad Contributors | **CC BY 4.0** | IN | Indian Nutrient Databank & Indian Food Composition Tables. |
 | **NYC DOHMH MenuStat** | New York City Department of Health and Mental Hygiene | **Public Domain** | US | Chain restaurant menu item nutrition dataset (<https://www.menustat.org/>). |
 | **OpenNosh** | OpenNosh Community | **CC0 1.0** | Global | Community-curated open nutrition packs. |
-| **MacroAI Curated Regional & Restaurant Packs** (`data/curated/*.json`) | MacroAI / openCalory Contributors | **ODbL-1.0 / CC0-1.0** | PH, SEA, East Asia, Global | Hand-curated regional dishes, staples, and chain menu items. |
+| **openCalory Curated Regional & Restaurant Packs** (`data/curated/*.json`) | openCalory Contributors | **ODbL-1.0 / CC0-1.0** | PH, SEA, East Asia, Global | Hand-curated regional dishes, staples, and chain menu items. |
 
 ## Reproducing or Extending the Catalog
 

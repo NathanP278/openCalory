@@ -43,11 +43,11 @@ Built mobile-first for effortless one-handed logging throughout the day, expandi
 ## Features
 
 - **Adherence-Neutral Dashboard:** Daily calorie progress arc (`Consumed` / `Remaining` toggle), protein/carbs/fat/fiber bars, 7-day stacked macro pace, 30-day logging heatmap, and micronutrient breakdown with top-contributor drill-down. Surplus intake is displayed calmly without punitive red alarms.
-- **Fast Multi-Source Food Logging:**
-  - **Embedded Core SQLite FTS5 Catalog (Offline-First):** Ships with a compact compressed SQLite FTS5 catalog (`public/data/food-catalog.db.gz` + `catalog-manifest.json`) that syncs into your browser's Origin Private File System (OPFS) via a Web Worker for instant offline full-text and barcode search, with automatic server fallback when OPFS is unavailable.
+- **Fast Multi-Source Food Logging (10,500+ Verified Foods Offline):**
+  - **Embedded Core SQLite FTS5 Catalog (Offline-First):** Ships with **over 10,500+ verified foods** compiled from USDA SR Legacy & Foundation, MenuStat restaurant nutrition, national food composition tables, Open Food Facts, and curated international cuisine packs—compressed into a compact **~2.1 MB** bundle (`public/data/food-catalog.db.gz`) that runs on-device via SQLite-WASM in an Origin Private File System (OPFS) Web Worker for **sub-25ms** offline full-text search, typo tolerance, multilingual aliases, and barcode lookup (with automatic server fallback when OPFS is unavailable).
   - **Optional Expanded Catalog Pack:** Self-hosters can pull or build a larger Expanded Pack (`npm run food-db:pull`) with broader global & packaged food coverage.
   - **Live External Search & Opt-In Commercial Providers:** Stateless server proxies for **USDA FoodData Central** and **Open Food Facts**, plus strictly opt-in live-only providers (**FatSecret**, **Edamam**, **Nutritionix**) when you supply your own API keys in `.env.local`.
-  - **In-App CSV/JSON Food Importer:** Upload custom `.csv` or `.json` food tables directly in **Settings → Food Database Catalog** to merge into your local food cache.
+  - **In-App CSV/JSON Food Importer:** Bring your own food tables or restaurant menus—upload custom `.csv` or `.json` files directly in **Settings → Food Database Catalog** for instant schema validation and local indexing.
   - **Camera Barcode Scanner:** Scan packaged barcodes directly in the browser (`html5-qrcode`) and add custom barcode products when missing.
   - **Quick Add, Copy From Date & Pinned Foods:** Log raw macros directly, copy meals from yesterday/any date, or pin frequent foods and recipes.
 - **Custom Foods & Recipe Builder:** Create reusable custom foods and multi-ingredient recipes with cooked-weight yield overrides and portion pickers.
@@ -75,12 +75,13 @@ Browser (PWA)
  │    ├── foodLogs, foodsCache, customRecipes, userGoals
  │    ├── weightLogs, pinnedFoods, tombstones
  │    └── Central Sync Middleware (pushes mutations & merges on startup)
- └── Static Offline Datasets (`public/data/staples-2500.json`, `ph-foods.json`)
+ └── OPFS SQLite-WASM Web Worker (`food-catalog.db.gz` — 10,500+ verified foods, <25ms FTS5)
          │
          ▼  (Optional / Live API calls)
 Next.js Server (Route Handlers)
  ├── /api/db/sync          ── libSQL client → Local SQLite (`opencalory.db`) or Turso Cloud
  ├── /api/auth/sync-session── HMAC-SHA256 HTTP-only cookie unlock (when SYNC_ACCESS_KEY is set)
+ ├── /api/foods/*          ── Unified FTS5 search, barcode lookup, streaming catalog & live providers
  ├── /api/ai/*             ── OpenAI-compatible vision proxy (meal-scan, label-ocr, meal-ideas, refine, health)
  ├── /api/usda/[...path]   ── USDA FoodData Central proxy (cached 24h)
  ├── /api/off/*            ── Open Food Facts search & barcode proxy
@@ -116,15 +117,15 @@ src/
 │   ├── log/page.tsx              # Food diary & date navigation
 │   ├── trends/page.tsx           # Weight & intake trends, adaptive TDEE, weekly check-in
 │   ├── recipes/page.tsx          # Custom foods & recipe manager
-│   ├── settings/page.tsx         # Goals calculator, themes, sync/AI status, backup & export
-│   └── api/                      # Next.js Route Handlers (ai, auth, db, off, usda, weight)
+│   ├── settings/page.tsx         # Goals calculator, themes, sync/AI status, catalog & backup
+│   └── api/                      # Next.js Route Handlers (ai, auth, db, foods, off, usda, weight)
 ├── components/                   # Feature-grouped UI components & drawers
 ├── hooks/                        # Barcode lookup & accessibility focus-trap hooks
 ├── lib/
 │   ├── ai/                       # OpenAI-compatible client & Zod response schemas
 │   ├── auth/                     # HMAC session token & passphrase verification
 │   ├── db/                       # Dexie IndexedDB, libSQL server DB, sync, JSON/CSV backup
-│   ├── foods/                    # Staples, USDA, and Open Food Facts adapters
+│   ├── foods/                    # SQLite FTS5 catalog (OPFS worker + server), dedup, normalizer, live providers
 │   ├── media/                    # Client-side image compression before AI upload
 │   ├── nutrition/                # Macro scaling, daily summaries, analytics, adaptive TDEE
 │   ├── recipes/                  # Recipe nutrition & yield calculations
@@ -132,11 +133,13 @@ src/
 ├── stores/                       # Zustand UI state (active date, drawers, auth lock)
 └── types/                        # Shared TypeScript nutrition & sync models
 public/
-├── data/                         # Bundled offline food JSON datasets (staples + PH foods)
+├── data/                         # Bundled Core SQLite FTS5 catalog (`food-catalog.db.gz`, manifest)
 ├── icons/                        # PWA app icons
 └── sw.js                         # Service worker for offline PWA support
 scripts/
-└── build-staples.ts              # Script to rebuild `public/data/staples-2500.json` from USDA
+├── build-food-catalog.ts         # Multi-source compiler for Core / Expanded SQLite FTS5 catalogs
+├── pull-food-catalog.ts          # CLI to pull prebuilt Expanded catalog packs
+└── catalog-adapters/             # Upstream dataset adapters (USDA, MenuStat, OFF, national tables, curated)
 ```
 
 ---
@@ -258,7 +261,7 @@ openCalory works with any OpenAI-compatible `/chat/completions` endpoint that su
 
 ### Apple Health iOS Shortcut Sync
 
-If you set `SHORTCUT_API_KEY`, open **Settings → Apple Health iOS Shortcut** in the app for a copy-paste 4-step iOS Personal Automation guide. The endpoint:
+If you set `SHORTCUT_API_KEY`, open **Settings → Apple Health iOS Shortcut** in the app for a copy-paste 5-step iOS Personal Automation guide. The endpoint:
 
 ```http
 GET /api/weight/latest?tz=America/New_York
@@ -269,7 +272,7 @@ returns today's latest weigh-in (`id`, `date`, `weight_kg`, `weight_lb`, `record
 
 ### Food Database Catalog & Optional Expanded Pack
 
-openCalory bundles a **Core SQLite FTS5 catalog** (`public/data/food-catalog.db.gz` and `public/data/catalog-manifest.json`) out of the box. In supported browsers, a background Web Worker verifies available OPFS storage quota, downloads the compressed catalog once, and runs full-text and barcode queries locally with zero network latency (falling back transparently to `/api/foods/search` and `/api/foods/barcode/[code]` when OPFS is unavailable).
+openCalory bundles a **Core SQLite FTS5 catalog** (`public/data/food-catalog.db.gz` and `public/data/catalog-manifest.json`) featuring **over 10,500+ verified foods** compressed down to just **~2.1 MB** (~11.5 MB uncompressed). In supported browsers, a background Web Worker verifies available OPFS storage quota, downloads the compressed catalog once, and runs full-text and barcode queries locally with **sub-25ms median latency** and zero network dependency (falling back transparently to `/api/foods/search` and `/api/foods/barcode/[code]` when OPFS is unavailable).
 
 For self-hosted deployments that want broader international and packaged food coverage, you can pull or build the optional **Expanded Pack**:
 
