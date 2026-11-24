@@ -184,9 +184,50 @@ export interface VisionCompletionResult {
   keyIndex: number;
 }
 
-const TRANSIENT_RETRY_STATUSES = new Set([429, 503]);
+const TRANSIENT_RETRY_STATUSES = new Set([408, 429, 500, 502, 503, 504, 529]);
 const MAX_TRANSIENT_RETRIES = 2;
-const INITIAL_RETRY_DELAY_MS = 500;
+const INITIAL_RETRY_DELAY_MS = 350;
+const MAX_SERVER_RETRY_DELAY_MS = 4000;
+
+function parseRetryAfterMs(
+  headers: Headers | undefined,
+  fallbackMs: number,
+  maxMs: number
+): number {
+  const raw = typeof headers?.get === 'function' ? headers.get('retry-after') : null;
+  if (raw) {
+    const seconds = Number(raw.trim());
+    if (Number.isFinite(seconds) && seconds > 0) {
+      return Math.min(maxMs, Math.max(250, Math.round(seconds * 1000)));
+    }
+    const dateMs = Date.parse(raw);
+    if (Number.isFinite(dateMs)) {
+      const delta = dateMs - Date.now();
+      if (delta > 0) {
+        return Math.min(maxMs, Math.max(250, delta));
+      }
+    }
+  }
+  return Math.min(maxMs, fallbackMs);
+}
+
+function isRetryableFetchError(err: unknown, externalSignal?: AbortSignal): boolean {
+  if (externalSignal?.aborted) {
+    return false;
+  }
+  if (err instanceof DOMException && (err.name === 'TimeoutError' || err.name === 'AbortError')) {
+    return true;
+  }
+  if (err instanceof Error) {
+    if (err.name === 'TimeoutError' || err.name === 'AbortError' || err.name === 'TypeError') {
+      return true;
+    }
+    if (/timeout|timed out|network|fetch failed|econnreset|etimedout/i.test(err.message)) {
+      return true;
+    }
+  }
+  return false;
+}
 
 function sleepWithSignal(ms: number, signal?: AbortSignal): Promise<void> {
   if (signal?.aborted) {
@@ -443,21 +484,43 @@ async function executeCandidateCompletion(
   const fetchWithRetry = async (useJsonFormat: boolean): Promise<Response> => {
     let attempt = 0;
     while (true) {
-      const response = await executeFetch(useJsonFormat);
-      // Retry inline on single-candidate setups or on the last remaining fallback candidate
-      if (
-        allowTransientRetry &&
-        !response.ok &&
-        TRANSIENT_RETRY_STATUSES.has(response.status) &&
-        attempt < MAX_TRANSIENT_RETRIES &&
-        !options?.signal?.aborted
-      ) {
-        const delayMs = INITIAL_RETRY_DELAY_MS * Math.pow(2, attempt);
-        attempt += 1;
-        await sleepWithSignal(delayMs, options?.signal);
-        continue;
+      try {
+        const response = await executeFetch(useJsonFormat);
+        // Retry inline on single-candidate setups or on the last remaining fallback candidate
+        if (
+          allowTransientRetry &&
+          !response.ok &&
+          TRANSIENT_RETRY_STATUSES.has(response.status) &&
+          attempt < MAX_TRANSIENT_RETRIES &&
+          !options?.signal?.aborted
+        ) {
+          const fallbackDelayMs = INITIAL_RETRY_DELAY_MS * Math.pow(2, attempt);
+          const delayMs = parseRetryAfterMs(
+            response.headers,
+            fallbackDelayMs,
+            MAX_SERVER_RETRY_DELAY_MS
+          );
+          attempt += 1;
+          await sleepWithSignal(delayMs, options?.signal);
+          continue;
+        }
+        return response;
+      } catch (err: unknown) {
+        if (
+          allowTransientRetry &&
+          attempt < MAX_TRANSIENT_RETRIES &&
+          isRetryableFetchError(err, options?.signal)
+        ) {
+          const delayMs = Math.min(
+            MAX_SERVER_RETRY_DELAY_MS,
+            INITIAL_RETRY_DELAY_MS * Math.pow(2, attempt)
+          );
+          attempt += 1;
+          await sleepWithSignal(delayMs, options?.signal);
+          continue;
+        }
+        throw err;
       }
-      return response;
     }
   };
 

@@ -342,7 +342,7 @@ describe('Task 10: AI Meal Scanner Sheet & HITL Review', () => {
       return originalCreateElement(tagName);
     });
 
-    vi.spyOn(global, 'fetch').mockResolvedValueOnce({
+    vi.spyOn(global, 'fetch').mockResolvedValue({
       ok: false,
       status: 503,
       json: async () => ({ error: 'AI service unavailable. Please try again.' }),
@@ -907,5 +907,88 @@ describe('Task 10: AI Meal Scanner Sheet & HITL Review', () => {
     });
     expect(screen.getByText('Grilled Chicken Breast')).toBeInTheDocument();
     expect(refineInput).toHaveValue('Swap to grilled salmon fillet');
+  });
+
+  test('retries transient 429/timeout/503 meal scan failures up to 3 total attempts and succeeds on retry', async () => {
+    let attempts = 0;
+    const fetchSpy = vi.spyOn(global, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+      if (url.includes('/api/ai/meal-scan')) {
+        attempts += 1;
+        if (attempts === 1) {
+          return {
+            ok: false,
+            status: 429,
+            json: async () => ({ error: 'Rate limit exceeded' }),
+          } as Response;
+        }
+        if (attempts === 2) {
+          throw new Error('Network timeout');
+        }
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            items: [
+              {
+                name: 'Grilled Chicken',
+                grams: 150,
+                per100g: { calories: 165, protein: 31, carbs: 0, fat: 3.6, fiber: 0 },
+                microsPer100g: { sodiumMg: 74, potassiumMg: 256 },
+              },
+            ],
+          }),
+        } as Response;
+      }
+      return { ok: false, status: 404 } as Response;
+    });
+
+    render(<AiMealScannerSheet open date="2026-11-14" mealSlot="lunch" onClose={() => {}} />);
+
+    fireEvent.click(screen.getByRole('tab', { name: /describe meal/i }));
+    fireEvent.change(screen.getByPlaceholderText(/2 boiled eggs, 150g white rice/i), {
+      target: { value: '150g grilled chicken' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /analyze meal/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Grilled Chicken')).toBeInTheDocument();
+    });
+    expect(attempts).toBe(3);
+    expect(fetchSpy).toHaveBeenCalledTimes(3);
+  });
+
+  test('caps retries at 3 total attempts on persistent 429 quota errors and does not retry 400 errors', async () => {
+    const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue({
+      ok: false,
+      status: 429,
+      json: async () => ({ error: 'Quota exceeded' }),
+    } as Response);
+
+    render(<AiMealScannerSheet open date="2026-11-14" mealSlot="lunch" onClose={() => {}} />);
+    fireEvent.click(screen.getByRole('tab', { name: /describe meal/i }));
+    fireEvent.change(screen.getByPlaceholderText(/2 boiled eggs, 150g white rice/i), {
+      target: { value: '150g grilled chicken' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /analyze meal/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Quota exceeded/i)).toBeInTheDocument();
+    });
+    // Bounded to initial attempt + 2 retries = 3 total calls
+    expect(fetchSpy).toHaveBeenCalledTimes(3);
+
+    fetchSpy.mockClear();
+    fetchSpy.mockResolvedValue({
+      ok: false,
+      status: 400,
+      json: async () => ({ error: 'Invalid input' }),
+    } as Response);
+
+    fireEvent.click(screen.getByRole('button', { name: /analyze meal/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/Invalid input/i)).toBeInTheDocument();
+    });
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
   });
 });

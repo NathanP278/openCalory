@@ -54,6 +54,54 @@ const MEAL_SCAN_MAX_DIMENSION = 640;
 const MEAL_SCAN_JPEG_QUALITY = 0.72;
 const CLIENT_SCAN_CACHE_LIMIT = 16;
 const SPECULATIVE_SCAN_DEBOUNCE_MS = 600;
+const MAX_SCAN_RETRY_ATTEMPTS = 2;
+const CLIENT_SCAN_TIMEOUT_MS = 35_000;
+const CLIENT_RETRY_BASE_DELAY_MS = 1500;
+const CLIENT_RETRY_MAX_DELAY_MS = 8000;
+const RETRYABLE_SCAN_STATUSES = new Set([408, 422, 429, 500, 502, 503, 504]);
+
+function isPermanentConfigError(status: number, errorMessage: string): boolean {
+  return status === 503 && /not configured/i.test(errorMessage);
+}
+
+function parseClientRetryDelayMs(
+  headers: Headers | undefined,
+  attemptIndex: number
+): number {
+  if (process.env.NODE_ENV === 'test') {
+    return 0;
+  }
+  const raw = typeof headers?.get === 'function' ? headers.get('retry-after') : null;
+  if (raw) {
+    const seconds = Number(raw.trim());
+    if (Number.isFinite(seconds) && seconds > 0) {
+      return Math.min(CLIENT_RETRY_MAX_DELAY_MS, Math.max(500, Math.round(seconds * 1000)));
+    }
+  }
+  const base = CLIENT_RETRY_BASE_DELAY_MS * Math.pow(2, attemptIndex);
+  const jitter = Math.round(Math.random() * 300);
+  return Math.min(CLIENT_RETRY_MAX_DELAY_MS, base + jitter);
+}
+
+function waitWithAbort(ms: number, signal: AbortSignal): Promise<void> {
+  if (signal.aborted) {
+    return Promise.reject(new DOMException('Aborted', 'AbortError'));
+  }
+  if (ms <= 0) {
+    return Promise.resolve();
+  }
+  return new Promise((resolve, reject) => {
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(new DOMException('Aborted', 'AbortError'));
+    };
+    const timer = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
+}
 
 const QUALITATIVE_REFINE_PATTERN =
   /\b(and|or|then|plus|with|instead|swap|replace|trimmed|boneless|skinless|fried|grilled|steamed|boiled|baked|roasted|raw|cooked)\b/i;
@@ -176,6 +224,7 @@ export function AiMealScannerSheet({
   const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
   const [contextPrompt, setContextPrompt] = useState<string>('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [retryAttempt, setRetryAttempt] = useState(0);
   const [scanError, setScanError] = useState<string | null>(null);
 
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
@@ -230,6 +279,7 @@ export function AiMealScannerSheet({
     setPrevOpen(open);
     if (!open) {
       setIsAnalyzing(false);
+      setRetryAttempt(0);
       setIsRefining(false);
       setScanError(null);
       setRefineError(null);
@@ -286,6 +336,8 @@ export function AiMealScannerSheet({
       }
 
       const controller = new AbortController();
+      const maxRetries = speculative ? 0 : MAX_SCAN_RETRY_ATTEMPTS;
+
       const promise = (async (): Promise<AiDraftItem[]> => {
         const requestBody: { imageDataUrl?: string; contextPrompt?: string } = {};
         if (trimmedImg) {
@@ -295,58 +347,123 @@ export function AiMealScannerSheet({
           requestBody.contextPrompt = trimmedPrompt;
         }
 
-        const res = await fetch('/api/ai/meal-scan', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(requestBody),
-          signal: controller.signal,
-        });
-
-        const data = await res.json().catch(() => ({}));
-
-        if (res.status === 401) {
-          useLoggerStore.getState().setSyncAuthLocked(true);
-          throw new Error(
-            data.error || 'Sync & AI locked. Enter your passphrase below to unlock and retry.'
-          );
-        }
-
-        if (!res.ok) {
-          throw new Error(data.error || `Meal scan failed with status ${res.status}`);
-        }
-
-        if (!Array.isArray(data.items) || data.items.length === 0) {
-          throw new Error(
-            'No food items detected. Please try again or add items manually.'
-          );
-        }
-
-        const itemsWithIds: AiDraftItem[] = data.items.map((it: Partial<AiDraftItem>) => ({
-          id: it.id || generateId(),
-          name: it.name || 'Unknown food',
-          grams: typeof it.grams === 'number' && it.grams > 0 ? it.grams : 100,
-          per100g: {
-            calories: it.per100g?.calories ?? 0,
-            protein: it.per100g?.protein ?? 0,
-            carbs: it.per100g?.carbs ?? 0,
-            fat: it.per100g?.fat ?? 0,
-            fiber: it.per100g?.fiber ?? 0,
-          },
-          microsPer100g: it.microsPer100g || {},
-          verifiedSource: null,
-        }));
-
-        if (scanCacheRef.current.has(cacheKey)) {
-          scanCacheRef.current.delete(cacheKey);
-        } else if (scanCacheRef.current.size >= CLIENT_SCAN_CACHE_LIMIT) {
-          const oldestKey = scanCacheRef.current.keys().next().value;
-          if (oldestKey !== undefined) {
-            scanCacheRef.current.delete(oldestKey);
+        let attempt = 0;
+        while (true) {
+          if (!speculative) {
+            setRetryAttempt(attempt);
           }
-        }
-        scanCacheRef.current.set(cacheKey, cloneDraftItems(itemsWithIds));
 
-        return itemsWithIds;
+          const attemptController = new AbortController();
+          let timedOut = false;
+          const onOuterAbort = () => attemptController.abort();
+          controller.signal.addEventListener('abort', onOuterAbort, { once: true });
+          const timeoutId = setTimeout(() => {
+            timedOut = true;
+            attemptController.abort();
+          }, CLIENT_SCAN_TIMEOUT_MS);
+
+          let res: Response;
+          try {
+            res = await fetch('/api/ai/meal-scan', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(requestBody),
+              signal: attemptController.signal,
+            });
+          } catch (err: unknown) {
+            clearTimeout(timeoutId);
+            controller.signal.removeEventListener('abort', onOuterAbort);
+
+            if (controller.signal.aborted) {
+              throw new DOMException('Aborted', 'AbortError');
+            }
+
+            if (attempt < maxRetries) {
+              const delayMs = parseClientRetryDelayMs(undefined, attempt);
+              attempt += 1;
+              await waitWithAbort(delayMs, controller.signal);
+              continue;
+            }
+
+            if (timedOut) {
+              throw new Error(
+                'AI meal scan timed out after multiple attempts. Please try again.'
+              );
+            }
+            throw err instanceof Error
+              ? err
+              : new Error('Network error while scanning meal. Please try again.');
+          } finally {
+            clearTimeout(timeoutId);
+            controller.signal.removeEventListener('abort', onOuterAbort);
+          }
+
+          const data = await res.json().catch(() => ({}));
+
+          if (res.status === 401) {
+            useLoggerStore.getState().setSyncAuthLocked(true);
+            throw new Error(
+              data.error || 'Sync & AI locked. Enter your passphrase below to unlock and retry.'
+            );
+          }
+
+          if (!res.ok) {
+            const errMsg = data.error || `Meal scan failed with status ${res.status}`;
+            const canRetry =
+              attempt < maxRetries &&
+              !controller.signal.aborted &&
+              RETRYABLE_SCAN_STATUSES.has(res.status) &&
+              !isPermanentConfigError(res.status, errMsg);
+
+            if (canRetry) {
+              const delayMs = parseClientRetryDelayMs(res.headers, attempt);
+              attempt += 1;
+              await waitWithAbort(delayMs, controller.signal);
+              continue;
+            }
+
+            throw new Error(errMsg);
+          }
+
+          if (!Array.isArray(data.items) || data.items.length === 0) {
+            if (attempt < maxRetries && !controller.signal.aborted) {
+              const delayMs = parseClientRetryDelayMs(res.headers, attempt);
+              attempt += 1;
+              await waitWithAbort(delayMs, controller.signal);
+              continue;
+            }
+            throw new Error(
+              'No food items detected. Please try again or add items manually.'
+            );
+          }
+
+          const itemsWithIds: AiDraftItem[] = data.items.map((it: Partial<AiDraftItem>) => ({
+            id: it.id || generateId(),
+            name: it.name || 'Unknown food',
+            grams: typeof it.grams === 'number' && it.grams > 0 ? it.grams : 100,
+            per100g: {
+              calories: it.per100g?.calories ?? 0,
+              protein: it.per100g?.protein ?? 0,
+              carbs: it.per100g?.carbs ?? 0,
+              fat: it.per100g?.fat ?? 0,
+              fiber: it.per100g?.fiber ?? 0,
+            },
+            microsPer100g: it.microsPer100g || {},
+            verifiedSource: null,
+          }));
+
+          if (scanCacheRef.current.has(cacheKey)) {
+            scanCacheRef.current.delete(cacheKey);
+          } else if (scanCacheRef.current.size >= CLIENT_SCAN_CACHE_LIMIT) {
+            const oldestKey = scanCacheRef.current.keys().next().value;
+            if (oldestKey !== undefined) {
+              scanCacheRef.current.delete(oldestKey);
+            }
+          }
+          scanCacheRef.current.set(cacheKey, cloneDraftItems(itemsWithIds));
+
+          return itemsWithIds;
+        }
       })().finally(() => {
         if (inFlightScanRef.current?.controller === controller) {
           inFlightScanRef.current = null;
@@ -603,6 +720,7 @@ export function AiMealScannerSheet({
       setScanError(msg);
     } finally {
       setIsAnalyzing(false);
+      setRetryAttempt(0);
     }
   };
 
@@ -811,11 +929,11 @@ export function AiMealScannerSheet({
         aria-modal="true"
         aria-label="AI Meal Scanner"
         data-testid="ai-meal-scanner-sheet"
-        className="fixed inset-0 z-50 flex flex-col justify-end sm:items-center sm:justify-center sm:p-6 bg-black/70 backdrop-blur-xs animate-backdrop-in"
+        className="modal-viewport-overlay z-50 flex flex-col justify-end sm:items-center sm:justify-center sm:p-6 bg-black/70 backdrop-blur-xs animate-backdrop-in"
         onClick={onClose}
       >
         <div
-          className="w-full max-w-lg mx-auto surface-elevated-sheet rounded-t-3xl sm:rounded-3xl px-4 sm:px-5 pt-3 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:pb-5 animate-sheet-in sm:animate-modal-in max-h-[92dvh] flex flex-col"
+          className="modal-viewport-sheet w-full max-w-lg mx-auto surface-elevated-sheet rounded-t-3xl sm:rounded-3xl px-4 sm:px-5 pt-3 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:pb-5 animate-sheet-in sm:animate-modal-in flex flex-col"
           onClick={(e) => e.stopPropagation()}
         >
           <div className="w-9 h-1 rounded-full bg-border mx-auto mb-3 shrink-0 sm:hidden" aria-hidden="true" />
@@ -1067,7 +1185,11 @@ export function AiMealScannerSheet({
                     {isAnalyzing ? (
                       <>
                         <Loader2 className="w-4 h-4 animate-spin" />
-                        <span>Analyzing meal description...</span>
+                        <span>
+                          {retryAttempt > 0
+                            ? `Retrying meal scan (attempt ${retryAttempt + 1} of ${MAX_SCAN_RETRY_ATTEMPTS + 1})...`
+                            : 'Analyzing meal description...'}
+                        </span>
                       </>
                     ) : (
                       <>
@@ -1178,7 +1300,11 @@ export function AiMealScannerSheet({
                   {isAnalyzing ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>Analyzing meal with your notes...</span>
+                      <span>
+                        {retryAttempt > 0
+                          ? `Retrying meal scan (attempt ${retryAttempt + 1} of ${MAX_SCAN_RETRY_ATTEMPTS + 1})...`
+                          : 'Analyzing meal with your notes...'}
+                      </span>
                     </>
                   ) : (
                     <>

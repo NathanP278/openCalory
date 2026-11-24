@@ -211,6 +211,35 @@ describe('Task 9: AI Schemas & JSON Parser', () => {
     expect(parsed.items[1].microsPer100g?.cholesterolMg).toBe(20);
   });
 
+  it('lifts micronutrients from alias keys (micros, micronutrients, micronutrientsPer100g) into microsPer100g', () => {
+    const raw = JSON.stringify({
+      items: [
+        {
+          name: 'Grilled Chicken Breast',
+          grams: 150,
+          per100g: { calories: 165, protein: 31, carbs: 0, fat: 3.6, fiber: 0 },
+          micronutrients: { sodiumMg: 74, potassiumMg: 256, ironMg: 1 },
+        },
+        {
+          name: 'Steamed Broccoli',
+          grams: 100,
+          per100g: { calories: 35, protein: 2.4, carbs: 7.2, fat: 0.4, fiber: 3.3 },
+          micros: { vitaminCMg: 65, folateMcg: 108 },
+        },
+      ],
+    });
+    const parsed = parseAiJsonResponse(raw, AiMealScanResponseSchema);
+    expect(parsed.items[0].microsPer100g).toEqual({
+      sodiumMg: 74,
+      potassiumMg: 256,
+      ironMg: 1,
+    });
+    expect(parsed.items[1].microsPer100g).toEqual({
+      vitaminCMg: 65,
+      folateMcg: 108,
+    });
+  });
+
   it('normalizes null name/brand, unit casing/aliases, numeric strings, and array wrappers in AiLabelOcrResponseSchema', () => {
     const labelWithNullsAndCasing = JSON.stringify({
       name: null,
@@ -569,6 +598,42 @@ describe('Task 9: OpenAI-Compatible Client Helper', () => {
     );
     expect(attempts).toBe(2);
     expect(result).toBe('OK');
+  });
+
+  it('retries transient timeouts and 429 rate limits up to the bounded retry limit', async () => {
+    process.env.AI_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/openai';
+    process.env.AI_API_KEY = 'AQ.test-key';
+    process.env.AI_MODEL = 'gemini-3.8-flash';
+
+    let attempts = 0;
+    const mockFetch = vi.fn().mockImplementation(async () => {
+      attempts++;
+      if (attempts === 1) {
+        throw new DOMException('The operation timed out.', 'TimeoutError');
+      }
+      if (attempts === 2) {
+        return {
+          ok: false,
+          status: 429,
+          text: async () => 'RESOURCE_EXHAUSTED: quota limit',
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          choices: [{ message: { content: '{"items":[]}' } }],
+        }),
+      };
+    });
+    vi.stubGlobal('fetch', mockFetch);
+
+    const result = await callVisionChatCompletion(
+      [{ role: 'user', content: 'Scan meal' }],
+      { responseFormat: false }
+    );
+    expect(attempts).toBe(3);
+    expect(result).toBe('{"items":[]}');
   });
 
   it('builds priority-ordered candidates from AI_FALLBACK_API_KEYS and AI_FALLBACK_MODELS', () => {
