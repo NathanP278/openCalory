@@ -100,10 +100,10 @@ export async function POST(request: Request) {
       ? `USER PREFERENCE / PANTRY NOTES (honor closely): "${trimmedPreference}".`
       : 'Include a practical mix of high-protein lutong bahay / Filipino-friendly staples and quick whole-food meals.',
     'Decompose each meal idea into non-overlapping whole-food/ingredient components with realistic gram weights so the summed items closely fit the remaining macro budget.',
-    'For each idea provide: title (non-empty string), prepMinutes (number >= 0), summary (short 1-sentence description), and items[] where each item has name, grams (>0), per100g (calories, protein, carbs, fat, fiber in g), and optional microsPer100g (sodiumMg, potassiumMg, calciumMg, ironMg, magnesiumMg, zincMg, vitaminAMcg, vitaminCMg, vitaminDMcg, vitaminB6Mg, vitaminB12Mcg, folateMcg, sugarG, addedSugarG, saturatedFatG, cholesterolMg, caffeineMg, alcoholG per 100g).',
-    'Estimate non-zero extended nutrients (sugarG, addedSugarG, saturatedFatG, cholesterolMg, caffeineMg, alcoholG) and core micronutrients in microsPer100g; omit keys equal to 0 (server backfills USDA micronutrients for standard whole foods).',
+    'For each idea provide: title (non-empty string), prepMinutes (number >= 0), summary (short 1-sentence description), and items[] where each item MUST have name, grams (>0), per100g (calories, protein, carbs, fat, fiber in g), and microsPer100g (sodiumMg, potassiumMg, calciumMg, ironMg, magnesiumMg, zincMg, vitaminAMcg, vitaminCMg, vitaminDMcg, vitaminB6Mg, vitaminB12Mcg, folateMcg, sugarG, addedSugarG, saturatedFatG, cholesterolMg, caffeineMg, alcoholG per 100g).',
+    'Always estimate non-zero vitamins, minerals, and extended nutrients (sugarG, addedSugarG, saturatedFatG, cholesterolMg, caffeineMg, alcoholG) in microsPer100g; only omit keys equal to 0.',
     'Return ONLY compact JSON matching this schema:',
-    '{"ideas":[{"title":"Chicken Adobo & Garlic Rice Bowl","prepMinutes":15,"summary":"Savory high-protein chicken breast adobo with steamed rice.","items":[{"name":"Chicken Breast, Cooked","grams":180,"per100g":{"calories":165,"protein":31,"carbs":0,"fat":3.6,"fiber":0}}]}]}',
+    '{"ideas":[{"title":"Chicken Adobo & Garlic Rice Bowl","prepMinutes":15,"summary":"Savory high-protein chicken breast adobo with steamed rice.","items":[{"name":"Chicken Breast, Cooked","grams":180,"per100g":{"calories":165,"protein":31,"carbs":0,"fat":3.6,"fiber":0},"microsPer100g":{"sodiumMg":74,"potassiumMg":256,"ironMg":1,"vitaminB6Mg":0.6,"saturatedFatG":1,"cholesterolMg":85}}]}]}',
   ]
     .filter(Boolean)
     .join('\n');

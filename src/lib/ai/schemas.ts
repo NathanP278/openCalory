@@ -73,20 +73,28 @@ function normalizeMealItemInput(val: unknown): unknown {
     return val;
   }
   const item = val as Record<string, unknown>;
-  const per100g = item.per100g;
-  if (!per100g || typeof per100g !== 'object' || Array.isArray(per100g)) {
-    return val;
-  }
-
-  const per100gObj = per100g as Record<string, unknown>;
   const liftedMicros: Record<string, unknown> = {};
   let hasLifted = false;
-  for (const key of MICRONUTRIENT_KEYS) {
-    if (per100gObj[key] !== undefined && per100gObj[key] !== null) {
-      liftedMicros[key] = per100gObj[key];
-      hasLifted = true;
+
+  const liftFromObject = (source: unknown) => {
+    if (!source || typeof source !== 'object' || Array.isArray(source)) {
+      return;
     }
-  }
+    const obj = source as Record<string, unknown>;
+    for (const key of MICRONUTRIENT_KEYS) {
+      if (obj[key] !== undefined && obj[key] !== null) {
+        liftedMicros[key] = obj[key];
+        hasLifted = true;
+      }
+    }
+  };
+
+  // Lift from top-level item keys, per100g, and common alias objects
+  liftFromObject(item);
+  liftFromObject(item.per100g);
+  liftFromObject(item.micronutrients);
+  liftFromObject(item.micros);
+  liftFromObject(item.micronutrientsPer100g);
 
   if (!hasLifted) {
     return val;

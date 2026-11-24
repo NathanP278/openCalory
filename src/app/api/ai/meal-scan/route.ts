@@ -70,10 +70,10 @@ export async function POST(request: Request) {
         ? `USER-PROVIDED MEAL DESCRIPTION (ground truth): "${trimmedContext}". Use this with the image for exact cuts, brands, hidden oils/sauces, prep methods, and stated weights.`
         : `USER-PROVIDED MEAL DESCRIPTION (ground truth): "${trimmedContext}". Estimate realistic portion weights in grams when not explicitly stated, and honor exact cuts, brands, hidden oils/sauces, prep methods, and stated weights.`
       : '',
-    'Per component provide: name, grams (>0), per100g (calories, protein, carbs, fat, fiber in g), and optional microsPer100g (sodiumMg, potassiumMg, calciumMg, ironMg, magnesiumMg, zincMg, vitaminAMcg, vitaminCMg, vitaminDMcg, vitaminB6Mg, vitaminB12Mcg, folateMcg, sugarG, addedSugarG, saturatedFatG, cholesterolMg, caffeineMg, alcoholG per 100g).',
-    'Estimate non-zero extended nutrients (sugarG, addedSugarG, saturatedFatG, cholesterolMg, caffeineMg, alcoholG) and core micronutrients in microsPer100g; to minimize latency, omit microsPer100g keys equal to 0 (server backfills USDA micronutrients for standard whole foods).',
+    'Per component you MUST provide: name, grams (>0), per100g (calories, protein, carbs, fat, fiber in g), and microsPer100g (estimated per 100g for all applicable keys: sodiumMg, potassiumMg, calciumMg, ironMg, magnesiumMg, zincMg, vitaminAMcg, vitaminCMg, vitaminDMcg, vitaminB6Mg, vitaminB12Mcg, folateMcg, sugarG, addedSugarG, saturatedFatG, cholesterolMg, caffeineMg, alcoholG).',
+    'ALWAYS include a populated microsPer100g object on every item with realistic non-zero estimates for its vitamins, minerals, and extended nutrients (sugarG, addedSugarG, saturatedFatG, cholesterolMg, caffeineMg, alcoholG); only omit individual keys whose value is 0.',
     'Return ONLY a compact JSON object with a top-level "items" array (NOT a bare array) matching this schema:',
-    '{"items":[{"name":"Ingredient Name","grams":150,"per100g":{"calories":165,"protein":31,"carbs":0,"fat":3.6,"fiber":0}}]}',
+    '{"items":[{"name":"Chicken Breast, Grilled","grams":150,"per100g":{"calories":165,"protein":31,"carbs":0,"fat":3.6,"fiber":0},"microsPer100g":{"sodiumMg":74,"potassiumMg":256,"calciumMg":15,"ironMg":1,"magnesiumMg":29,"zincMg":1,"vitaminB6Mg":0.6,"vitaminB12Mcg":0.3,"folateMcg":4,"saturatedFatG":1,"cholesterolMg":85}}]}',
   ]
     .filter(Boolean)
     .join('\n');
@@ -100,7 +100,8 @@ export async function POST(request: Request) {
       ],
       {
         temperature: 0,
-        maxTokens: 2500,
+        maxTokens: 3200,
+        timeoutMs: 25000,
         signal: request.signal,
       }
     );

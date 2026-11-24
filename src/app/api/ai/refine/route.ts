@@ -86,9 +86,9 @@ export async function POST(request: Request) {
     `Instruction: "${instruction.trim()}"`,
     contextPrompt ? `Prep context: "${contextPrompt.trim()}"` : '',
     'Apply requested gram edits, additions, removals, or density updates across non-overlapping items (grams > 0).',
-    'Include per100g (calories, protein, carbs, fat, fiber) and optional microsPer100g (sodiumMg, potassiumMg, calciumMg, ironMg, magnesiumMg, zincMg, vitaminAMcg, vitaminCMg, vitaminDMcg, vitaminB6Mg, vitaminB12Mcg, folateMcg, sugarG, addedSugarG, saturatedFatG, cholesterolMg, caffeineMg, alcoholG per 100g). Estimate non-zero extended nutrients (sugarG, addedSugarG, saturatedFatG, cholesterolMg, caffeineMg, alcoholG) in microsPer100g; omit microsPer100g for unchanged standard whole foods and omit 0 keys.',
+    'Every item MUST include per100g (calories, protein, carbs, fat, fiber) and microsPer100g (estimated per 100g for applicable keys: sodiumMg, potassiumMg, calciumMg, ironMg, magnesiumMg, zincMg, vitaminAMcg, vitaminCMg, vitaminDMcg, vitaminB6Mg, vitaminB12Mcg, folateMcg, sugarG, addedSugarG, saturatedFatG, cholesterolMg, caffeineMg, alcoholG). Always estimate non-zero vitamins, minerals, and extended nutrients in microsPer100g for new or modified items; omit keys equal to 0.',
     'Return ONLY compact JSON matching this schema:',
-    '{"items":[{"name":"Ingredient Name","grams":150,"per100g":{"calories":165,"protein":31,"carbs":0,"fat":3.6,"fiber":0}}]}',
+    '{"items":[{"name":"Chicken Breast, Grilled","grams":150,"per100g":{"calories":165,"protein":31,"carbs":0,"fat":3.6,"fiber":0},"microsPer100g":{"sodiumMg":74,"potassiumMg":256,"ironMg":1,"vitaminB6Mg":0.6,"saturatedFatG":1,"cholesterolMg":85}}]}',
   ]
     .filter(Boolean)
     .join('\n');
@@ -103,7 +103,7 @@ export async function POST(request: Request) {
       ],
       {
         temperature: 0,
-        maxTokens: 2500,
+        maxTokens: 3200,
         signal: request.signal,
       }
     );

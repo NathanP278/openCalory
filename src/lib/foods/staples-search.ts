@@ -800,13 +800,60 @@ function applyStapleMicrosToItem<
   };
 }
 
+function applyDeterministicExtendedFallback<
+  T extends {
+    name: string;
+    per100g?: { calories: number; protein: number; carbs: number; fat: number; fiber: number };
+    microsPer100g?: Micronutrients;
+  },
+>(item: T): T & { microsPer100g?: Micronutrients } {
+  if (!item.per100g) {
+    return item;
+  }
+
+  const syntheticFood: FoodItem = {
+    id: 'ai:synthetic',
+    source: 'staple',
+    name: item.name,
+    basis: 'per100g',
+    servingSize: 100,
+    servingUnit: 'g',
+    nutrientsPerBasis: item.per100g,
+    micronutrientsPerBasis: { ...(item.microsPer100g ?? {}) },
+    updatedAt: 0,
+  };
+
+  const estimated = estimateMissingStapleMicros(syntheticFood);
+  const mergedMicros: Micronutrients = { ...(item.microsPer100g ?? {}) };
+  let changed = false;
+  for (const key of TRACKED_MICRONUTRIENT_KEYS) {
+    if (typeof mergedMicros[key] !== 'number' && typeof estimated[key] === 'number' && estimated[key]! > 0) {
+      mergedMicros[key] = estimated[key];
+      changed = true;
+    }
+  }
+
+  if (!changed) {
+    return item;
+  }
+
+  return {
+    ...item,
+    microsPer100g: mergedMicros,
+  };
+}
+
 /**
  * Enriches meal items with missing micronutrient densities from the local staples cache
  * or (on the server) the SQLite FTS5 food catalog.
  * Never overwrites micronutrient keys already populated by the AI or user verification.
  */
 export async function enrichMealItemsWithStaples<
-  T extends { name: string; microsPer100g?: Micronutrients },
+  T extends {
+    name: string;
+    per100g?: { calories: number; protein: number; carbs: number; fat: number; fiber: number };
+    microsPer100g?: Micronutrients;
+  },
 >(items: T[]): Promise<Array<T & { microsPer100g?: Micronutrients }>> {
   if (!Array.isArray(items) || items.length === 0) {
     return items;
@@ -826,20 +873,23 @@ export async function enrichMealItemsWithStaples<
 
       const candidates = filterStaples(staples, item.name, 8, { allowFuzzy: false });
       const bestStaple = selectCleanStapleCandidate(candidates, item.name);
-      return applyStapleMicrosToItem(item, bestStaple);
+      const fromStaple = applyStapleMicrosToItem(item, bestStaple);
+      return applyDeterministicExtendedFallback(fromStaple);
     });
   }
 
   if (typeof window !== 'undefined') {
-    return items;
+    return items.map((item) =>
+      hasAllTrackedMicros(item.microsPer100g) ? item : applyDeterministicExtendedFallback(item)
+    );
   }
 
-  let searchServerCatalogFn: typeof import('./server-catalog').searchServerCatalog;
+  let searchServerCatalogFn: typeof import('./server-catalog').searchServerCatalog | null = null;
   try {
     const serverCatalog = await import('./server-catalog');
     searchServerCatalogFn = serverCatalog.searchServerCatalog;
   } catch {
-    return items;
+    searchServerCatalogFn = null;
   }
 
   return Promise.all(
@@ -847,12 +897,16 @@ export async function enrichMealItemsWithStaples<
       if (hasAllTrackedMicros(item.microsPer100g) || !item.name?.trim()) {
         return item;
       }
+      if (!searchServerCatalogFn) {
+        return applyDeterministicExtendedFallback(item);
+      }
       try {
         const candidates = await searchServerCatalogFn(item.name, { limit: 8 });
         const bestStaple = selectCleanStapleCandidate(candidates, item.name);
-        return applyStapleMicrosToItem(item, bestStaple);
+        const fromCatalog = applyStapleMicrosToItem(item, bestStaple);
+        return applyDeterministicExtendedFallback(fromCatalog);
       } catch {
-        return item;
+        return applyDeterministicExtendedFallback(item);
       }
     })
   );
