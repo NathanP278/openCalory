@@ -72,17 +72,40 @@ export interface FoodSearchDrawerProps {
   date?: string;
   mealSlot?: string;
   onClose: () => void;
+  searchDebounceMs?: number;
 }
 
 interface FoodSearchContentProps {
   date?: string;
   mealSlot?: string;
   onClose: () => void;
+  searchDebounceMs?: number;
 }
 
 type HistoryTab = 'recents' | 'frequent' | 'pinned';
 
-function FoodSearchContent({ date, mealSlot, onClose }: FoodSearchContentProps) {
+const MAX_HISTORY_LOGS = 500;
+
+function runDrawerTransition(
+  updateCb: () => void,
+  direction: 'forward' | 'backward'
+): void {
+  if (
+    typeof document !== 'undefined' &&
+    document.documentElement.classList.contains('keyboard-open')
+  ) {
+    updateCb();
+    return;
+  }
+  runViewTransition(updateCb, { direction });
+}
+
+function FoodSearchContent({
+  date,
+  mealSlot,
+  onClose,
+  searchDebounceMs,
+}: FoodSearchContentProps) {
   const storeDate = useLoggerStore((s) => s.activeDate);
   const storeMealSlot = useLoggerStore((s) => s.activeMealSlot);
   const searchInitialQuery = useLoggerStore((s) => s.searchInitialQuery);
@@ -135,8 +158,9 @@ function FoodSearchContent({ date, mealSlot, onClose }: FoodSearchContentProps) 
   const onlineAbortRef = useRef<AbortController | null>(null);
   const resultsContainerRef = useRef<HTMLDivElement | null>(null);
   const savedScrollTopRef = useRef<number>(0);
+  const lastSettledScrollQueryRef = useRef<string>('');
 
-  // Initialize OPFS SQLite catalog and load Dexie foodsCache, customRecipes, pinnedFoods, and foodLogs on mount
+  // Initialize OPFS SQLite catalog and load bounded Dexie history/cache on mount
   useEffect(() => {
     isMountedRef.current = true;
     initClientCatalog();
@@ -152,7 +176,7 @@ function FoodSearchContent({ date, mealSlot, onClose }: FoodSearchContentProps) 
           db.foodsCache.toArray(),
           db.customRecipes.toArray(),
           db.pinnedFoods.toArray(),
-          db.foodLogs.toArray(),
+          db.foodLogs.orderBy('createdAt').reverse().limit(MAX_HISTORY_LOGS).toArray(),
         ]);
         if (isMountedRef.current) {
           setCachedFoods(cached);
@@ -224,23 +248,6 @@ function FoodSearchContent({ date, mealSlot, onClose }: FoodSearchContentProps) 
     };
   }, [legacyCandidateIds, catalogSyncState.status]);
 
-  const refreshHistoryAndPins = async () => {
-    try {
-      const [pins, logs, cached] = await Promise.all([
-        db.pinnedFoods.toArray(),
-        db.foodLogs.toArray(),
-        db.foodsCache.toArray(),
-      ]);
-      if (isMountedRef.current) {
-        setPinnedFoods(pins);
-        setHistoryLogs(logs);
-        setCachedFoods(cached);
-      }
-    } catch {
-      // Ignore refresh error
-    }
-  };
-
   const runOnlineSearch = React.useCallback(async (trimmedQuery: string, normKey: string) => {
     if (!trimmedQuery || !normKey) return;
     if (onlineAbortRef.current) {
@@ -300,6 +307,8 @@ function FoodSearchContent({ date, mealSlot, onClose }: FoodSearchContentProps) 
     }
     const normKey = val.trim().toLowerCase();
     if (!normKey) {
+      lastSettledScrollQueryRef.current = '';
+      savedScrollTopRef.current = 0;
       setCatalogResults([]);
       setCatalogSettledQuery('');
       setOnlineResults([]);
@@ -319,7 +328,14 @@ function FoodSearchContent({ date, mealSlot, onClose }: FoodSearchContentProps) 
     setOnlineError(null);
   };
 
-  // Instant local OPFS SQLite FTS5 catalog search (< 25ms)
+  const effectiveDebounceMs =
+    searchDebounceMs !== undefined
+      ? searchDebounceMs
+      : isTestEnvironment()
+        ? 0
+        : 70;
+
+  // Debounced, transition-wrapped local OPFS SQLite FTS5 catalog search
   useEffect(() => {
     const trimmed = query.trim();
     const normKey = trimmed.toLowerCase();
@@ -333,25 +349,41 @@ function FoodSearchContent({ date, mealSlot, onClose }: FoodSearchContentProps) 
     const abortController = new AbortController();
     catalogAbortRef.current = abortController;
 
-    void searchClientCatalog(trimmed, {
-      limit: 35,
-      signal: abortController.signal,
-    })
-      .then((res) => {
-        if (abortController.signal.aborted || !isMountedRef.current) return;
-        setCatalogResults(Array.isArray(res?.items) ? res.items : []);
-        setCatalogSettledQuery(normKey);
+    const executeSearch = () => {
+      if (abortController.signal.aborted) return;
+      void searchClientCatalog(trimmed, {
+        limit: 35,
+        signal: abortController.signal,
       })
-      .catch(() => {
-        if (abortController.signal.aborted || !isMountedRef.current) return;
-        setCatalogResults([]);
-        setCatalogSettledQuery(normKey);
-      });
+        .then((res) => {
+          if (abortController.signal.aborted || !isMountedRef.current) return;
+          React.startTransition(() => {
+            setCatalogResults(Array.isArray(res?.items) ? res.items : []);
+            setCatalogSettledQuery(normKey);
+          });
+        })
+        .catch(() => {
+          if (abortController.signal.aborted || !isMountedRef.current) return;
+          React.startTransition(() => {
+            setCatalogResults([]);
+            setCatalogSettledQuery(normKey);
+          });
+        });
+    };
 
+    if (effectiveDebounceMs <= 0) {
+      executeSearch();
+      return () => {
+        abortController.abort();
+      };
+    }
+
+    const timerId = window.setTimeout(executeSearch, effectiveDebounceMs);
     return () => {
+      window.clearTimeout(timerId);
       abortController.abort();
     };
-  }, [query, catalogSyncState.status]);
+  }, [query, catalogSyncState.status, effectiveDebounceMs]);
 
   // Deduplicated local results for the active query (custom foods -> catalog -> foodsCache)
   const localMergedFoods = React.useMemo(() => {
@@ -393,7 +425,8 @@ function FoodSearchContent({ date, mealSlot, onClose }: FoodSearchContentProps) 
     };
   }, [query, catalogSettledQuery, localMergedFoods.length, runOnlineSearch]);
 
-  const foodsById = React.useMemo(() => {
+  // History lookup map decoupled from live catalogResults/onlineResults so typing never recomputes 60-day history
+  const historyFoodsById = React.useMemo(() => {
     const map = new Map<string, FoodItem>();
     for (const item of cachedFoods) {
       map.set(item.id, item);
@@ -401,18 +434,8 @@ function FoodSearchContent({ date, mealSlot, onClose }: FoodSearchContentProps) 
     for (const [id, item] of resolvedLegacyFoods.entries()) {
       map.set(id, item);
     }
-    for (const item of catalogResults) {
-      if (!map.has(item.id)) {
-        map.set(item.id, item);
-      }
-    }
-    for (const item of onlineResults) {
-      if (!map.has(item.id)) {
-        map.set(item.id, item);
-      }
-    }
     return map;
-  }, [cachedFoods, resolvedLegacyFoods, catalogResults, onlineResults]);
+  }, [cachedFoods, resolvedLegacyFoods]);
 
   const recipesById = React.useMemo(
     () => new Map<string, CustomRecipe>(customRecipes.map((r) => [r.id, r])),
@@ -434,18 +457,18 @@ function FoodSearchContent({ date, mealSlot, onClose }: FoodSearchContentProps) 
   }, [pinnedFoods, legacyAliasMap]);
 
   const recentEntries = React.useMemo(
-    () => computeRecentEntries(historyLogs, foodsById, recipesById, 25, legacyAliasMap),
-    [historyLogs, foodsById, recipesById, legacyAliasMap]
+    () => computeRecentEntries(historyLogs, historyFoodsById, recipesById, 25, legacyAliasMap),
+    [historyLogs, historyFoodsById, recipesById, legacyAliasMap]
   );
 
   const frequentEntries = React.useMemo(
-    () => computeFrequentEntries(historyLogs, foodsById, recipesById, 60, 25, legacyAliasMap),
-    [historyLogs, foodsById, recipesById, legacyAliasMap]
+    () => computeFrequentEntries(historyLogs, historyFoodsById, recipesById, 60, 25, legacyAliasMap),
+    [historyLogs, historyFoodsById, recipesById, legacyAliasMap]
   );
 
   const pinnedEntries = React.useMemo(
-    () => computePinnedEntries(pinnedFoods, foodsById, recipesById, historyLogs, legacyAliasMap),
-    [pinnedFoods, foodsById, recipesById, historyLogs, legacyAliasMap]
+    () => computePinnedEntries(pinnedFoods, historyFoodsById, recipesById, historyLogs, legacyAliasMap),
+    [pinnedFoods, historyFoodsById, recipesById, historyLogs, legacyAliasMap]
   );
 
   const lastPortionMap = React.useMemo(() => {
@@ -554,34 +577,42 @@ function FoodSearchContent({ date, mealSlot, onClose }: FoodSearchContentProps) 
       savedScrollTopRef.current = resultsContainerRef.current.scrollTop;
     }
     triggerHaptic(8);
-    runViewTransition(
-      () => {
-        setSelectedRecipe(entry.kind === 'recipe' ? entry.recipe : null);
-        setSelectedFood(targetFood);
-        setSelectedOptionId(preferred?.id ?? '');
-        setAmount(String(initialAmount));
-        setUnit(initialUnit);
-      },
-      { direction: 'forward' }
-    );
+    runDrawerTransition(() => {
+      setSelectedRecipe(entry.kind === 'recipe' ? entry.recipe : null);
+      setSelectedFood(targetFood);
+      setSelectedOptionId(preferred?.id ?? '');
+      setAmount(String(initialAmount));
+      setUnit(initialUnit);
+    }, 'forward');
   }, []);
 
-  const handleBackToResults = () => {
+  const handleBackToResults = useCallback(() => {
     triggerHaptic(6);
-    runViewTransition(
-      () => {
-        setSelectedFood(null);
-        setSelectedRecipe(null);
-      },
-      { direction: 'backward' }
-    );
-  };
+    runDrawerTransition(() => {
+      setSelectedFood(null);
+      setSelectedRecipe(null);
+    }, 'backward');
+  }, []);
 
   useLayoutEffect(() => {
     if (!selectedFood && resultsContainerRef.current) {
       resultsContainerRef.current.scrollTop = savedScrollTopRef.current;
     }
   }, [selectedFood]);
+
+  // Reset results scroll to top when a different search query settles
+  useEffect(() => {
+    if (!catalogSettledQuery) return;
+    if (lastSettledScrollQueryRef.current === catalogSettledQuery) return;
+    const hadPreviousQuery = lastSettledScrollQueryRef.current !== '';
+    lastSettledScrollQueryRef.current = catalogSettledQuery;
+    if (hadPreviousQuery) {
+      savedScrollTopRef.current = 0;
+      if (!selectedFood && resultsContainerRef.current) {
+        resultsContainerRef.current.scrollTop = 0;
+      }
+    }
+  }, [catalogSettledQuery, selectedFood]);
 
   const handleAmountChange = (val: string) => {
     setAmount(val);
@@ -679,13 +710,10 @@ function FoodSearchContent({ date, mealSlot, onClose }: FoodSearchContentProps) 
 
     setStagedEntries((prev) => [...prev, entry]);
     triggerHaptic(8);
-    runViewTransition(
-      () => {
-        setSelectedFood(null);
-        setSelectedRecipe(null);
-      },
-      { direction: 'backward' }
-    );
+    runDrawerTransition(() => {
+      setSelectedFood(null);
+      setSelectedRecipe(null);
+    }, 'backward');
   };
 
   const handleQuickLogEntry = useCallback(
@@ -726,13 +754,28 @@ function FoodSearchContent({ date, mealSlot, onClose }: FoodSearchContentProps) 
             : Promise.resolve(),
         ]);
 
-        await refreshHistoryAndPins();
+        if (isMountedRef.current) {
+          setHistoryLogs((prev) => [logEntry, ...prev].slice(0, MAX_HISTORY_LOGS));
+          if (entry.kind === 'food') {
+            setCachedFoods((prev) => {
+              const existingIdx = prev.findIndex((f) => f.id === entry.food.id);
+              if (existingIdx === -1) return [entry.food, ...prev];
+              const next = [...prev];
+              next[existingIdx] = entry.food;
+              return next;
+            });
+          }
+        }
 
         showUndoToast({
           message: `Logged ${logEntry.name} (${quickAmount} ${quickUnit})`,
           onUndo: async () => {
             await db.foodLogs.delete(logEntry.id);
-            await refreshHistoryAndPins();
+            if (isMountedRef.current) {
+              setHistoryLogs((prev) =>
+                prev.filter((item) => item.id !== logEntry.id)
+              );
+            }
           },
         });
 
@@ -834,59 +877,104 @@ function FoodSearchContent({ date, mealSlot, onClose }: FoodSearchContentProps) 
     [stagedEntries]
   );
 
+  const effectiveHighlightedIndex =
+    displayedEntries.length === 0
+      ? -1
+      : highlightedIndex >= displayedEntries.length
+        ? displayedEntries.length - 1
+        : highlightedIndex;
+
+  useEffect(() => {
+    if (effectiveHighlightedIndex < 0 || !resultsContainerRef.current) return;
+    const highlightedEl = resultsContainerRef.current.querySelector<HTMLElement>(
+      '[data-highlighted="true"]'
+    );
+    highlightedEl?.scrollIntoView?.({ block: 'nearest' });
+  }, [effectiveHighlightedIndex]);
+
+  const keydownStateRef = useRef({
+    selectedFood,
+    displayedEntries,
+    highlightedIndex: effectiveHighlightedIndex,
+    parsedAmount,
+    isLogging,
+    handleBackToResults,
+    onClose,
+    handleSelectEntry,
+    handleLogFood,
+  });
+
+  useLayoutEffect(() => {
+    keydownStateRef.current = {
+      selectedFood,
+      displayedEntries,
+      highlightedIndex: effectiveHighlightedIndex,
+      parsedAmount,
+      isLogging,
+      handleBackToResults,
+      onClose,
+      handleSelectEntry,
+      handleLogFood,
+    };
+  });
+
+  // Single-mount global keydown listener backed by ref so typing never tears down/re-attaches listeners
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      const state = keydownStateRef.current;
       if (e.key === 'Escape') {
         e.preventDefault();
-        if (selectedFood) {
-          handleBackToResults();
+        if (state.selectedFood) {
+          state.handleBackToResults();
         } else {
-          onClose();
+          state.onClose();
         }
         return;
       }
 
-      if (!selectedFood && displayedEntries.length > 0) {
+      if (!state.selectedFood && state.displayedEntries.length > 0) {
         if (e.key === 'ArrowDown') {
           e.preventDefault();
-          setHighlightedIndex((prev) =>
-            prev < displayedEntries.length - 1 ? prev + 1 : 0
-          );
+          const len = state.displayedEntries.length;
+          setHighlightedIndex((prev) => (prev < len - 1 ? prev + 1 : 0));
           return;
         }
         if (e.key === 'ArrowUp') {
           e.preventDefault();
-          setHighlightedIndex((prev) =>
-            prev > 0 ? prev - 1 : displayedEntries.length - 1
-          );
+          const len = state.displayedEntries.length;
+          setHighlightedIndex((prev) => (prev > 0 ? prev - 1 : len - 1));
           return;
         }
         if (
           e.key === 'Enter' &&
-          highlightedIndex >= 0 &&
-          displayedEntries[highlightedIndex]
+          state.highlightedIndex >= 0 &&
+          state.displayedEntries[state.highlightedIndex]
         ) {
           e.preventDefault();
-          handleSelectEntry(displayedEntries[highlightedIndex]);
+          state.handleSelectEntry(state.displayedEntries[state.highlightedIndex]);
           return;
         }
       }
 
       if (
-        selectedFood &&
+        state.selectedFood &&
         e.key === 'Enter' &&
         (e.target as HTMLElement | null)?.tagName !== 'BUTTON' &&
-        parsedAmount > 0 &&
-        !isLogging
+        state.parsedAmount > 0 &&
+        !state.isLogging
       ) {
         e.preventDefault();
-        void handleLogFood();
+        void state.handleLogFood();
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  });
+  }, []);
+
+  const trimmedQuery = query.trim();
+  const normalizedQuery = trimmedQuery.toLowerCase();
+  const isCatalogPending = Boolean(trimmedQuery) && catalogSettledQuery !== normalizedQuery;
 
   return (
     <motion.div
@@ -1091,26 +1179,23 @@ function FoodSearchContent({ date, mealSlot, onClose }: FoodSearchContentProps) 
                         key={pinKey}
                         entry={entry}
                         index={idx}
-                        isHighlighted={highlightedIndex === idx}
+                        isHighlighted={effectiveHighlightedIndex === idx}
                         isPinned={pinnedIdSet.has(pinKey)}
-                        animateEntry={!query.trim()}
+                        animateEntry={!trimmedQuery}
                         onSelect={handleSelectEntry}
                         onTogglePin={handleTogglePin}
                         onQuickLog={handleQuickLogEntry}
                       />
                     );
                   })}
-                  {query.trim() &&
+                  {trimmedQuery &&
                     !isOnlineLoading &&
-                    !onlineQueryCache.has(query.trim().toLowerCase()) && (
+                    !onlineQueryCache.has(normalizedQuery) && (
                       <div className="pt-1.5 pb-1">
                         <button
                           type="button"
                           onClick={() =>
-                            void runOnlineSearch(
-                              query.trim(),
-                              query.trim().toLowerCase()
-                            )
+                            void runOnlineSearch(trimmedQuery, normalizedQuery)
                           }
                           className="tactile-press w-full py-2 px-3 rounded-xl bg-surface-sub border border-border hover:bg-accent hover:border-border-focus text-xs font-semibold text-foreground flex items-center justify-center gap-1.5 transition-colors"
                         >
@@ -1123,7 +1208,7 @@ function FoodSearchContent({ date, mealSlot, onClose }: FoodSearchContentProps) 
                       </div>
                     )}
                 </>
-              ) : isOnlineLoading ? (
+              ) : isOnlineLoading || isCatalogPending ? (
                 <FoodRowSkeleton count={4} />
               ) : (
                 <div className="py-10 text-center text-muted-foreground text-xs flex flex-col items-center gap-2.5">
@@ -1202,6 +1287,7 @@ export function FoodSearchDrawer({
   date,
   mealSlot,
   onClose,
+  searchDebounceMs,
 }: FoodSearchDrawerProps) {
   return (
     <AnimatePresence>
@@ -1211,6 +1297,7 @@ export function FoodSearchDrawer({
           date={date}
           mealSlot={mealSlot}
           onClose={onClose}
+          searchDebounceMs={searchDebounceMs}
         />
       )}
     </AnimatePresence>

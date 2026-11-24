@@ -37,6 +37,18 @@ vi.mock('@/lib/foods/client-catalog', async () => {
   };
 });
 
+vi.mock('@/lib/foods/search-history', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/foods/search-history')>(
+    '@/lib/foods/search-history'
+  );
+  return {
+    ...actual,
+    computeRecentEntries: vi.fn(actual.computeRecentEntries),
+    computeFrequentEntries: vi.fn(actual.computeFrequentEntries),
+    computePinnedEntries: vi.fn(actual.computePinnedEntries),
+  };
+});
+
 const mockCatalogFoods: FoodItem[] = [
   {
     id: 'staple:101',
@@ -1073,5 +1085,232 @@ describe('FoodSearchDrawer component', () => {
     const rowEl = resultsList.querySelector('.food-search-row');
     expect(rowEl).not.toBeNull();
     expect(rowEl?.className).not.toContain('stagger-item');
+  });
+
+  test('isolates history memos so typing and receiving catalogResults never recomputes 60-day history', async () => {
+    const recentSpy = vi.mocked(computeRecentEntries);
+    const frequentSpy = vi.mocked(computeFrequentEntries);
+    const pinnedSpy = vi.mocked(computePinnedEntries);
+
+    render(
+      <FoodSearchDrawer
+        open
+        date="2026-11-14"
+        mealSlot="lunch"
+        onClose={vi.fn()}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Chicken breast, raw')).toBeInTheDocument();
+    });
+
+    recentSpy.mockClear();
+    frequentSpy.mockClear();
+    pinnedSpy.mockClear();
+
+    const searchInput = screen.getByLabelText(/search foods/i);
+    fireEvent.change(searchInput, { target: { value: 'chicken' } });
+
+    await waitFor(() => {
+      expect(clientCatalog.searchClientCatalog).toHaveBeenCalledWith(
+        'chicken',
+        expect.any(Object)
+      );
+    });
+
+    expect(recentSpy).not.toHaveBeenCalled();
+    expect(frequentSpy).not.toHaveBeenCalled();
+    expect(pinnedSpy).not.toHaveBeenCalled();
+  });
+
+  test('Review Focus #2: retains previous search results while next query is in-flight, shows empty state only after settle, and clears instantly on empty input', async () => {
+    let resolveSecondQuery!: (res: { items: FoodItem[]; source: 'opfs' }) => void;
+    vi.mocked(clientCatalog.searchClientCatalog).mockImplementation((q: string) => {
+      if (q === 'chicken') {
+        return Promise.resolve({ items: [mockCatalogFoods[0]], source: 'opfs' });
+      }
+      return new Promise((resolve) => {
+        resolveSecondQuery = resolve;
+      });
+    });
+
+    render(
+      <FoodSearchDrawer
+        open
+        date="2026-11-14"
+        mealSlot="lunch"
+        onClose={vi.fn()}
+      />
+    );
+
+    const searchInput = screen.getByLabelText(/search foods/i);
+    fireEvent.change(searchInput, { target: { value: 'chicken' } });
+    await waitFor(() => {
+      expect(screen.getByText('Chicken breast, raw')).toBeInTheDocument();
+    });
+
+    // Type a non-matching query whose worker promise stays pending
+    fireEvent.change(searchInput, { target: { value: 'zzzznonexistentfood' } });
+
+    // Previous result stays visible without flashing "No matching foods found."
+    expect(screen.getByText('Chicken breast, raw')).toBeInTheDocument();
+    expect(screen.queryByText(/no matching foods found/i)).not.toBeInTheDocument();
+
+    // Once the pending query settles with 0 items (and offline so online fallback does not trigger), show empty state
+    vi.stubGlobal('navigator', { ...navigator, onLine: false });
+    await act(async () => {
+      resolveSecondQuery({ items: [], source: 'opfs' });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText(/no matching foods found/i)).toBeInTheDocument();
+    });
+
+    // Clearing query immediately restores Recents tab
+    fireEvent.change(searchInput, { target: { value: '' } });
+    expect(screen.getByRole('tablist', { name: /food history tabs/i })).toBeInTheDocument();
+    expect(screen.queryByText(/no matching foods found/i)).not.toBeInTheDocument();
+    vi.unstubAllGlobals();
+  });
+
+  test('debounces rapid typing when searchDebounceMs is configured and only queries the final text', async () => {
+    vi.mocked(clientCatalog.searchClientCatalog).mockClear();
+
+    render(
+      <FoodSearchDrawer
+        open
+        date="2026-11-14"
+        mealSlot="lunch"
+        onClose={vi.fn()}
+        searchDebounceMs={70}
+      />
+    );
+
+    const searchInput = screen.getByLabelText(/search foods/i);
+    fireEvent.change(searchInput, { target: { value: 'c' } });
+    fireEvent.change(searchInput, { target: { value: 'ch' } });
+    fireEvent.change(searchInput, { target: { value: 'chi' } });
+
+    expect(clientCatalog.searchClientCatalog).not.toHaveBeenCalled();
+
+    await waitFor(() => {
+      expect(clientCatalog.searchClientCatalog).toHaveBeenCalledTimes(1);
+    });
+    expect(clientCatalog.searchClientCatalog).toHaveBeenCalledWith('chi', expect.any(Object));
+  });
+
+  test('Review Focus #3: preserves scroll position on Back from portion panel but resets scrollTop to 0 when a new query settles', async () => {
+    render(
+      <FoodSearchDrawer
+        open
+        date="2026-11-14"
+        mealSlot="lunch"
+        onClose={vi.fn()}
+      />
+    );
+
+    const searchInput = screen.getByLabelText(/search foods/i);
+    fireEvent.change(searchInput, { target: { value: 'chicken' } });
+    await waitFor(() => {
+      expect(screen.getByText('Chicken breast, raw')).toBeInTheDocument();
+    });
+
+    const resultsContainer = screen.getByTestId('food-search-results');
+    resultsContainer.scrollTop = 180;
+
+    // Open portion selector and come Back -> scrollTop restored to 180
+    fireEvent.click(screen.getByText('Chicken breast, raw'));
+    fireEvent.click(screen.getByRole('button', { name: /back to search results/i }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('food-search-results').scrollTop).toBe(180);
+    });
+
+    // Search a different query -> scrollTop resets to 0
+    fireEvent.change(screen.getByLabelText(/search foods/i), { target: { value: 'rice' } });
+    await waitFor(() => {
+      expect(screen.getByText('Brown rice, medium-grain, cooked')).toBeInTheDocument();
+      expect(screen.getByTestId('food-search-results').scrollTop).toBe(0);
+    });
+  });
+
+  test('mounts global keydown listener once across keystrokes and clamps highlightedIndex when results shrink', async () => {
+    const addListenerSpy = vi.spyOn(window, 'addEventListener');
+
+    render(
+      <FoodSearchDrawer
+        open
+        date="2026-11-14"
+        mealSlot="lunch"
+        onClose={vi.fn()}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Chicken breast, raw')).toBeInTheDocument();
+    });
+
+    const keydownMounts = () =>
+      addListenerSpy.mock.calls.filter(([type]) => type === 'keydown').length;
+    const initialCount = keydownMounts();
+    expect(initialCount).toBe(1);
+
+    const searchInput = screen.getByLabelText(/search foods/i);
+    fireEvent.change(searchInput, { target: { value: 'c' } });
+    fireEvent.change(searchInput, { target: { value: 'ch' } });
+    fireEvent.change(searchInput, { target: { value: 'chi' } });
+    fireEvent.change(searchInput, { target: { value: 'chick' } });
+
+    expect(keydownMounts()).toBe(1);
+
+    // Highlight index 0 and ensure narrowing doesn't break keyboard selection
+    fireEvent.keyDown(window, { key: 'ArrowDown' });
+    await waitFor(() => {
+      const highlighted = screen
+        .getByTestId('food-search-results')
+        .querySelectorAll('[data-highlighted="true"]');
+      expect(highlighted).toHaveLength(1);
+    });
+  });
+
+  test('Review Focus #5: bounds mount Dexie foodLogs query via createdAt index and handles quick-log + Undo incrementally without full-table rescans', async () => {
+    const toArraySpy = vi.spyOn(db.foodLogs, 'toArray');
+    const orderBySpy = vi.spyOn(db.foodLogs, 'orderBy');
+
+    render(
+      <FoodSearchDrawer
+        open
+        date="2026-11-14"
+        mealSlot="lunch"
+        onClose={vi.fn()}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Chicken breast, raw')).toBeInTheDocument();
+    });
+
+    expect(orderBySpy).toHaveBeenCalledWith('createdAt');
+    expect(toArraySpy).not.toHaveBeenCalled();
+
+    // Quick-log Egg McMuffin without scanning db.foodLogs.toArray()
+    fireEvent.click(screen.getByRole('button', { name: /quick log egg mcmuffin/i }));
+    await waitFor(async () => {
+      expect(await db.foodLogs.count()).toBe(1);
+      expect(useLoggerStore.getState().undoToast).not.toBeNull();
+    });
+    expect(toArraySpy).not.toHaveBeenCalled();
+
+    // Undo removes from both Dexie and in-memory Recents without full-table rescan
+    const undo = useLoggerStore.getState().undoToast?.onUndo;
+    expect(undo).toBeDefined();
+    await act(async () => {
+      await undo?.();
+    });
+
+    expect(await db.foodLogs.count()).toBe(0);
+    expect(toArraySpy).not.toHaveBeenCalled();
+    expect(screen.queryByText(/Last: 1 pc/i)).not.toBeInTheDocument();
   });
 });
