@@ -358,11 +358,12 @@ describe('EditLogEntryDrawer & Notes Display', () => {
     expect(toggle).toBeChecked();
 
     fireEvent.change(screen.getByLabelText(/name/i), { target: { value: 'Double Scoop Whey' } });
-    fireEvent.change(screen.getByLabelText(/calories/i), { target: { value: '260' } });
     fireEvent.change(screen.getByLabelText(/protein/i), { target: { value: '50' } });
     fireEvent.change(screen.getByLabelText(/carbs/i), { target: { value: '4' } });
     fireEvent.change(screen.getByLabelText(/fat/i), { target: { value: '2' } });
     fireEvent.change(screen.getByLabelText(/fiber/i), { target: { value: '1' } });
+    // 50*4 + 4*4 + 2*9 = 234 kcal auto-recalculated from macros
+    expect(screen.getByLabelText(/calories/i)).toHaveValue(234);
     fireEvent.change(screen.getByLabelText(/note/i), { target: { value: '   ' } });
 
     fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
@@ -370,12 +371,63 @@ describe('EditLogEntryDrawer & Notes Display', () => {
     await waitFor(async () => {
       const saved = await db.foodLogs.get('e-qa');
       expect(saved?.name).toBe('Double Scoop Whey');
-      expect(saved?.nutritionSnapshot.calories).toBe(260);
+      expect(saved?.nutritionSnapshot.calories).toBe(234);
       expect(saved?.nutritionSnapshot.protein).toBe(50);
       expect(saved?.nutritionSnapshot.carbs).toBe(4);
       expect(saved?.nutritionSnapshot.fat).toBe(2);
       expect(saved?.nutritionSnapshot.fiber).toBe(1);
       expect(saved?.note).toBeUndefined();
+    });
+  });
+
+  it('recalculates calories when editing macros and proportionally scales macros when editing calories (including clear & retype)', async () => {
+    const entry = makeEntry({
+      id: 'e-bidir',
+      name: 'Chicken Bowl',
+      source: 'usda',
+      amount: 100,
+      unit: 'g',
+      calories: 200,
+      protein: 20,
+      carbs: 15,
+      fat: 6,
+      fiber: 2,
+    });
+    await db.foodLogs.put(entry);
+
+    render(<EditLogEntryDrawer entry={entry} onClose={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole('switch', { name: /edit macros directly/i }));
+
+    // 1) Editing calories -> proportionally scales macros from anchor (200 -> 400 doubles macros)
+    fireEvent.change(screen.getByLabelText(/calories/i), { target: { value: '' } });
+    expect(screen.getByLabelText(/protein/i)).toHaveValue(0);
+    fireEvent.change(screen.getByLabelText(/calories/i), { target: { value: '400' } });
+    expect(screen.getByLabelText(/protein/i)).toHaveValue(40);
+    expect(screen.getByLabelText(/carbs/i)).toHaveValue(30);
+    expect(screen.getByLabelText(/fat/i)).toHaveValue(12);
+    expect(screen.getByLabelText(/fiber/i)).toHaveValue(4);
+
+    // 2) Editing a macro -> recalculates calories using 4-4-9 (30*4 + 30*4 + 12*9 = 348)
+    fireEvent.change(screen.getByLabelText(/protein/i), { target: { value: '30' } });
+    expect(screen.getByLabelText(/calories/i)).toHaveValue(348);
+
+    // 3) Subsequent calorie edit scales from the updated macro anchor (348 -> 174 halves macros)
+    fireEvent.change(screen.getByLabelText(/calories/i), { target: { value: '174' } });
+    expect(screen.getByLabelText(/protein/i)).toHaveValue(15);
+    expect(screen.getByLabelText(/carbs/i)).toHaveValue(15);
+    expect(screen.getByLabelText(/fat/i)).toHaveValue(6);
+    expect(screen.getByLabelText(/fiber/i)).toHaveValue(2);
+
+    fireEvent.click(screen.getByRole('button', { name: /save changes/i }));
+
+    await waitFor(async () => {
+      const saved = await db.foodLogs.get('e-bidir');
+      expect(saved?.nutritionSnapshot.calories).toBe(174);
+      expect(saved?.nutritionSnapshot.protein).toBe(15);
+      expect(saved?.nutritionSnapshot.carbs).toBe(15);
+      expect(saved?.nutritionSnapshot.fat).toBe(6);
+      expect(saved?.nutritionSnapshot.fiber).toBe(2);
     });
   });
 

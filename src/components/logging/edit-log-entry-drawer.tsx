@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
   AlertCircle,
@@ -278,6 +278,13 @@ function EditLogEntryContent({
   const [directFiber, setDirectFiber] = useState<string>(() =>
     String(entry.nutritionSnapshot?.fiber ?? 0)
   );
+  const macroRatioAnchorRef = useRef<MacroNutrients>({
+    calories: entry.nutritionSnapshot?.calories ?? 0,
+    protein: entry.nutritionSnapshot?.protein ?? 0,
+    carbs: entry.nutritionSnapshot?.carbs ?? 0,
+    fat: entry.nutritionSnapshot?.fat ?? 0,
+    fiber: entry.nutritionSnapshot?.fiber ?? 0,
+  });
 
   const [hasPortionChanged, setHasPortionChanged] = useState<boolean>(false);
   const [hasUnitManuallyEdited, setHasUnitManuallyEdited] = useState<boolean>(false);
@@ -464,18 +471,86 @@ function EditLogEntryContent({
       setDirectCarbs(String(computedScaled.macros.carbs));
       setDirectFat(String(computedScaled.macros.fat));
       setDirectFiber(String(computedScaled.macros.fiber));
+      macroRatioAnchorRef.current = { ...computedScaled.macros };
     }
     setDirectMacroEdit(nextChecked);
   };
 
+  const handleDirectMacroChange = (
+    field: 'protein' | 'carbs' | 'fat' | 'fiber',
+    rawVal: string
+  ) => {
+    const nextProteinStr = field === 'protein' ? rawVal : directProtein;
+    const nextCarbsStr = field === 'carbs' ? rawVal : directCarbs;
+    const nextFatStr = field === 'fat' ? rawVal : directFat;
+    const nextFiberStr = field === 'fiber' ? rawVal : directFiber;
+
+    if (field === 'protein') setDirectProtein(rawVal);
+    if (field === 'carbs') setDirectCarbs(rawVal);
+    if (field === 'fat') setDirectFat(rawVal);
+    if (field === 'fiber') setDirectFiber(rawVal);
+
+    const nextP = parseNonNegative(nextProteinStr);
+    const nextC = parseNonNegative(nextCarbsStr);
+    const nextF = parseNonNegative(nextFatStr);
+    const nextFiber = parseNonNegative(nextFiberStr);
+
+    if (field === 'fiber') {
+      macroRatioAnchorRef.current = {
+        ...macroRatioAnchorRef.current,
+        fiber: nextFiber,
+      };
+      return;
+    }
+
+    const nextCalories = computeMacroCalories(nextP, nextC, nextF);
+    setDirectCalories(String(nextCalories));
+    if (nextCalories > 0 || nextP > 0 || nextC > 0 || nextF > 0 || nextFiber > 0) {
+      macroRatioAnchorRef.current = {
+        calories: nextCalories,
+        protein: nextP,
+        carbs: nextC,
+        fat: nextF,
+        fiber: nextFiber,
+      };
+    }
+  };
+
+  const handleDirectCaloriesChange = (rawVal: string) => {
+    setDirectCalories(rawVal);
+    const nextCalories = parseNonNegative(rawVal);
+    const anchor = macroRatioAnchorRef.current;
+    const anchorCalories =
+      anchor.calories > 0
+        ? anchor.calories
+        : computeMacroCalories(anchor.protein, anchor.carbs, anchor.fat);
+
+    if (anchorCalories > 0) {
+      const factor = nextCalories / anchorCalories;
+      setDirectProtein(String(round2(anchor.protein * factor)));
+      setDirectCarbs(String(round2(anchor.carbs * factor)));
+      setDirectFat(String(round2(anchor.fat * factor)));
+      setDirectFiber(String(round2(anchor.fiber * factor)));
+    }
+  };
+
   const handleSyncToMacros = () => {
     triggerHaptic(6);
-    const cal = computeMacroCalories(
-      parseNonNegative(directProtein),
-      parseNonNegative(directCarbs),
-      parseNonNegative(directFat)
-    );
+    const p = parseNonNegative(directProtein);
+    const c = parseNonNegative(directCarbs);
+    const f = parseNonNegative(directFat);
+    const fiber = parseNonNegative(directFiber);
+    const cal = computeMacroCalories(p, c, f);
     setDirectCalories(String(cal));
+    if (cal > 0 || p > 0 || c > 0 || f > 0 || fiber > 0) {
+      macroRatioAnchorRef.current = {
+        calories: cal,
+        protein: p,
+        carbs: c,
+        fat: f,
+        fiber,
+      };
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -562,7 +637,7 @@ function EditLogEntryContent({
       animate={{ opacity: 1 }}
       exit={isTestEnvironment() ? undefined : { opacity: 0 }}
       transition={{ duration: 0.24, ease: EASE_EXPRESSIVE }}
-      className="fixed inset-0 z-50 flex flex-col justify-end sm:items-center sm:justify-center sm:p-6 bg-black/70 backdrop-blur-md"
+      className="modal-viewport-overlay z-50 flex flex-col justify-end sm:items-center sm:justify-center sm:p-6 bg-black/70 backdrop-blur-md"
       onClick={onClose}
     >
       <motion.div
@@ -570,7 +645,7 @@ function EditLogEntryContent({
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={isTestEnvironment() ? undefined : { opacity: 0, y: 36, scale: 0.95 }}
         transition={SPRING_SHEET}
-        className="w-full max-w-lg mx-auto surface-elevated-sheet rounded-t-3xl sm:rounded-3xl px-4 sm:px-5 pt-3 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:pb-5 max-h-[90dvh] flex flex-col"
+        className="modal-viewport-sheet w-full max-w-lg mx-auto surface-elevated-sheet rounded-t-3xl sm:rounded-3xl px-4 sm:px-5 pt-3 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:pb-5 flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="w-9 h-1 rounded-full bg-border mx-auto mb-3 shrink-0 sm:hidden" aria-hidden="true" />
@@ -830,7 +905,7 @@ function EditLogEntryContent({
                     step="any"
                     min="0"
                     value={directCalories}
-                    onChange={(e) => setDirectCalories(e.target.value)}
+                    onChange={(e) => handleDirectCaloriesChange(e.target.value)}
                     className="w-full px-3 py-2 text-base sm:text-sm font-semibold tabular-nums rounded-xl bg-card border border-border focus:outline-none focus:ring-2 focus:ring-ring text-foreground"
                   />
                 </div>
@@ -850,7 +925,7 @@ function EditLogEntryContent({
                       step="any"
                       min="0"
                       value={directProtein}
-                      onChange={(e) => setDirectProtein(e.target.value)}
+                      onChange={(e) => handleDirectMacroChange('protein', e.target.value)}
                       className="w-full px-2.5 py-1.5 text-base sm:text-xs font-semibold tabular-nums rounded-xl bg-card border border-border focus:outline-none focus:ring-2 focus:ring-ring text-foreground"
                     />
                   </div>
@@ -868,7 +943,7 @@ function EditLogEntryContent({
                       step="any"
                       min="0"
                       value={directCarbs}
-                      onChange={(e) => setDirectCarbs(e.target.value)}
+                      onChange={(e) => handleDirectMacroChange('carbs', e.target.value)}
                       className="w-full px-2.5 py-1.5 text-base sm:text-xs font-semibold tabular-nums rounded-xl bg-card border border-border focus:outline-none focus:ring-2 focus:ring-ring text-foreground"
                     />
                   </div>
@@ -886,7 +961,7 @@ function EditLogEntryContent({
                       step="any"
                       min="0"
                       value={directFat}
-                      onChange={(e) => setDirectFat(e.target.value)}
+                      onChange={(e) => handleDirectMacroChange('fat', e.target.value)}
                       className="w-full px-2.5 py-1.5 text-base sm:text-xs font-semibold tabular-nums rounded-xl bg-card border border-border focus:outline-none focus:ring-2 focus:ring-ring text-foreground"
                     />
                   </div>
@@ -904,7 +979,7 @@ function EditLogEntryContent({
                       step="any"
                       min="0"
                       value={directFiber}
-                      onChange={(e) => setDirectFiber(e.target.value)}
+                      onChange={(e) => handleDirectMacroChange('fiber', e.target.value)}
                       className="w-full px-2.5 py-1.5 text-base sm:text-xs font-semibold tabular-nums rounded-xl bg-card border border-border focus:outline-none focus:ring-2 focus:ring-ring text-foreground"
                     />
                   </div>
