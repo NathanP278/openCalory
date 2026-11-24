@@ -43,8 +43,8 @@ Built mobile-first for effortless one-handed logging throughout the day, expandi
 ## Features
 
 - **Adherence-Neutral Dashboard:** Daily calorie progress arc (`Consumed` / `Remaining` toggle), protein/carbs/fat/fiber bars, 7-day stacked macro pace, 30-day logging heatmap, and micronutrient breakdown with top-contributor drill-down. Surplus intake is displayed calmly without punitive red alarms.
-- **Fast Multi-Source Food Logging (29,600+ Verified & Branded Foods Built-In):**
-  - **Built-In Unified SQLite FTS5 Catalog (Offline-First):** Ships directly inside the repo with **29,600+ deduplicated foods** compiled from USDA Foundation, SR Legacy & FNDDS, region-balanced non-US & global Open Food Facts branded products (SEA, East Asia, Europe, Oceania, Canada, India, LatAm, US), and curated international cuisine & restaurant chain packs—compressed into a **~4.4 MB** bundle (`public/data/food-catalog.db.gz`) that deploys straight to Vercel and runs on-device via SQLite-WASM in an OPFS Web Worker for **sub-10ms** offline full-text search, natural household serving units, typo tolerance, multilingual aliases, and barcode lookup (with automatic server fallback when OPFS is unavailable).
+- **Fast Multi-Source Food Logging (147,674 Verified & Branded Foods Built-In):**
+  - **Built-In Unified SQLite FTS5 Catalog (Offline-First):** Ships directly inside the repo with **147,674 deduplicated foods** compiled from USDA Foundation, SR Legacy, FNDDS & Branded (25k slice), Health Canada's Canadian Nutrient File (CNF), 24-country region-balanced Open Food Facts branded products (SEA, East Asia, Europe, Oceania, Canada, India, LatAm, US), and curated international cuisine & restaurant chain packs—compressed into a **21.31 MB** bundle (`public/data/food-catalog.db.gz`) that deploys straight to Vercel and runs on-device via SQLite-WASM in an OPFS Web Worker for **sub-10ms** offline full-text search, natural household serving units, typo tolerance, multilingual aliases, and barcode lookup (with automatic server fallback when OPFS is unavailable).
   - **Live External Search & Opt-In Commercial Providers:** Smart fallback + on-demand **Search online** via stateless server proxies for **USDA FoodData Central** and **Open Food Facts**, plus strictly opt-in live-only providers (**FatSecret**, **Edamam**, **Nutritionix**) when you supply your own API keys in `.env.local`.
   - **In-App CSV/JSON Food Importer:** Bring your own food tables or restaurant menus—upload custom `.csv` or `.json` files directly in **Settings → Food Database Catalog** for instant schema validation and local indexing.
   - **Camera Barcode Scanner:** Scan packaged barcodes directly in the browser (`html5-qrcode`) and add custom barcode products when missing.
@@ -132,12 +132,11 @@ src/
 ├── stores/                       # Zustand UI state (active date, drawers, auth lock)
 └── types/                        # Shared TypeScript nutrition & sync models
 public/
-├── data/                         # Bundled Core SQLite FTS5 catalog (`food-catalog.db.gz`, manifest)
+├── data/                         # Bundled unified SQLite FTS5 catalog (`food-catalog.db.gz`, manifest)
 ├── icons/                        # PWA app icons
 └── sw.js                         # Service worker for offline PWA support
 scripts/
-├── build-food-catalog.ts         # Multi-source compiler for Core / Expanded SQLite FTS5 catalogs
-├── pull-food-catalog.ts          # CLI to pull prebuilt Expanded catalog packs
+├── build-food-catalog.ts         # Multi-source compiler for the unified SQLite FTS5 catalog
 └── catalog-adapters/             # Upstream dataset adapters (USDA, MenuStat, OFF, national tables, curated)
 ```
 
@@ -229,7 +228,7 @@ All variables are **server-side only** and **optional**. Copy `.env.example` to 
 
 | Variable | Required | Default | Description |
 | --- | --- | --- | --- |
-| `FOOD_CATALOG_DIR` | No | `./data/catalog`, `/app/data/catalog`, `./public/data` | Optional directory containing `food-catalog.db.gz` and `catalog-manifest.json` (used when overriding the bundled Core catalog with an Expanded Pack). |
+| `FOOD_CATALOG_DIR` | No | `./data/catalog`, `/app/data/catalog`, `./public/data` | Optional override directory containing a custom `food-catalog.db.gz` and `catalog-manifest.json`. |
 | `USDA_API_KEY` | No | `DEMO_KEY` | Free [USDA FoodData Central API key](https://fdc.nal.usda.gov/api-key-signup.html) for higher rate limits on live whole-food searches. |
 | `FATSECRET_CLIENT_ID` / `FATSECRET_CLIENT_SECRET` | No | — | Strictly opt-in live-only FatSecret OAuth2 credentials (never scraped or stored in distributed catalog files). |
 | `EDAMAM_APP_ID` / `EDAMAM_APP_KEY` | No | — | Strictly opt-in live-only Edamam Food Database API credentials. |
@@ -271,7 +270,7 @@ returns today's latest weigh-in (`id`, `date`, `weight_kg`, `weight_lb`, `record
 
 ### Built-In Food Database Catalog
 
-openCalory embeds a unified **SQLite FTS5 catalog** (`public/data/food-catalog.db.gz` and `public/data/catalog-manifest.json`) directly in the repository with **29,600+ deduplicated foods** compressed to **~4.4 MB** (~21.2 MB uncompressed) — zero runtime fetching or extra setup required on Vercel, Docker, or local installs. In supported browsers, a background Web Worker verifies available OPFS storage quota, syncs the catalog once, and runs full-text and barcode queries locally with **sub-10ms median latency** offline (falling back transparently to `/api/foods/search` and `/api/foods/barcode/[code]` when OPFS is unavailable).
+openCalory embeds a unified **SQLite FTS5 catalog** (`public/data/food-catalog.db.gz` and `public/data/catalog-manifest.json`) directly in the repository with **147,674 deduplicated foods** compressed to **21.31 MB** (91.04 MB uncompressed) — zero runtime fetching or extra setup required on Vercel, Docker, or local installs. In supported browsers, a background Web Worker verifies available OPFS storage quota, syncs the catalog once, and runs full-text and barcode queries locally with **~7ms median latency** offline (falling back transparently to `/api/foods/search` and `/api/foods/barcode/[code]` when OPFS is unavailable).
 
 To rebuild the built-in catalog locally from upstream open datasets (or include your own local CSV nutrition tables):
 

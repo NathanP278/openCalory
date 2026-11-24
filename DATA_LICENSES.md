@@ -40,6 +40,4 @@ The committed Core catalog (`public/data/food-catalog.db.gz`, 147,674 deduplicat
 
 ## Reproducing or Extending the Catalog
 
-- Core catalog (committed): `npm run food-db:build`
-- Expanded catalog (local / self-hosted): `npm run food-db:build:expanded`
-- Pull prebuilt Expanded catalog: `npm run food-db:pull`
+- Unified built-in catalog (committed): `npm run food-db:build`
