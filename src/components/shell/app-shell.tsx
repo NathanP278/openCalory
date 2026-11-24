@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
+import dynamic from "next/dynamic";
 import { usePathname } from "next/navigation";
-import { AnimatePresence } from "motion/react";
 import { Lock, ShieldCheck, X } from "lucide-react";
 import { BottomNav } from "./bottom-nav";
 import { DesktopSidebar } from "./desktop-sidebar";
@@ -17,17 +17,49 @@ import {
 import { useRouteDirection } from "@/components/motion/route-direction-context";
 import { QuickAddDrawer } from "@/components/logging/quick-add-drawer";
 import { FoodSearchDrawer } from "@/components/logging/food-search-drawer";
-import { EditLogEntryDrawer } from "@/components/logging/edit-log-entry-drawer";
-import { BarcodeScannerDrawer } from "@/components/scanner/barcode-scanner-drawer";
-import { AiMealScannerSheet } from "@/components/scanner/ai-meal-scanner-sheet";
-import { AiMealIdeasDrawer } from "@/components/scanner/ai-meal-ideas-drawer";
-import { WeighInDrawer } from "@/components/weight/weigh-in-drawer";
 import { useLoggerStore } from "@/stores/logger-store";
 import { ensureDefaultUserGoals } from "@/lib/nutrition/goals";
 import { db } from "@/lib/db/opencalory-db";
 import { isCloudSyncEnabled, syncWithCentralDb } from "@/lib/db/cloud-sync";
-import { triggerHaptic } from "@/lib/motion";
+import { initClientCatalogIfCached } from "@/lib/foods/client-catalog";
+import { isTestEnvironment, triggerHaptic } from "@/lib/motion";
 import { useFocusTrap } from "@/hooks/use-focus-trap";
+
+const EditLogEntryDrawer = dynamic(
+  () =>
+    import("@/components/logging/edit-log-entry-drawer").then(
+      (mod) => mod.EditLogEntryDrawer
+    ),
+  { ssr: false }
+);
+const BarcodeScannerDrawer = dynamic(
+  () =>
+    import("@/components/scanner/barcode-scanner-drawer").then(
+      (mod) => mod.BarcodeScannerDrawer
+    ),
+  { ssr: false }
+);
+const AiMealScannerSheet = dynamic(
+  () =>
+    import("@/components/scanner/ai-meal-scanner-sheet").then(
+      (mod) => mod.AiMealScannerSheet
+    ),
+  { ssr: false }
+);
+const AiMealIdeasDrawer = dynamic(
+  () =>
+    import("@/components/scanner/ai-meal-ideas-drawer").then(
+      (mod) => mod.AiMealIdeasDrawer
+    ),
+  { ssr: false }
+);
+const WeighInDrawer = dynamic(
+  () =>
+    import("@/components/weight/weigh-in-drawer").then(
+      (mod) => mod.WeighInDrawer
+    ),
+  { ssr: false }
+);
 
 export { QuickActionDock };
 export type { QuickActionType };
@@ -139,7 +171,7 @@ export function AppShell({ children, onQuickAction }: AppShellProps) {
   const editingWeight = useLoggerStore((s) => s.editingWeight);
   const syncAuthLocked = useLoggerStore((s) => s.syncAuthLocked);
 
-  // Restore & persist per-route scroll position
+  // Restore & debounced persist per-route scroll position (never writes synchronously inside scroll handler)
   useEffect(() => {
     if (typeof window === "undefined") return;
     const key = `macro_scroll_${pathname}`;
@@ -157,19 +189,52 @@ export function AppShell({ children, onQuickAction }: AppShellProps) {
       // sessionStorage unavailable
     }
 
-    const handleScroll = () => {
+    let scrollTimer: number | null = null;
+    const persistScrollNow = () => {
+      if (scrollTimer !== null) {
+        window.clearTimeout(scrollTimer);
+        scrollTimer = null;
+      }
       try {
         window.sessionStorage?.setItem(key, String(Math.round(window.scrollY)));
       } catch {
         // Ignore storage errors
       }
     };
+
+    const handleScroll = () => {
+      if (scrollTimer !== null) {
+        window.clearTimeout(scrollTimer);
+      }
+      scrollTimer = window.setTimeout(persistScrollNow, 250);
+    };
+
     window.addEventListener("scroll", handleScroll, { passive: true });
+    window.addEventListener("pagehide", persistScrollNow);
     return () => {
-      handleScroll();
+      persistScrollNow();
       window.removeEventListener("scroll", handleScroll);
+      window.removeEventListener("pagehide", persistScrollNow);
     };
   }, [pathname]);
+
+  // Warm-only OPFS catalog worker preload during idle (zero network on cold first visits)
+  useEffect(() => {
+    if (typeof window === "undefined" || isTestEnvironment()) return;
+    const win = window as Window & {
+      requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
+      cancelIdleCallback?: (id: number) => void;
+    };
+    const triggerWarm = () => {
+      void initClientCatalogIfCached();
+    };
+    if (typeof win.requestIdleCallback === "function") {
+      const idleId = win.requestIdleCallback(triggerWarm, { timeout: 1500 });
+      return () => win.cancelIdleCallback?.(idleId);
+    }
+    const timeoutId = window.setTimeout(triggerWarm, 1500);
+    return () => window.clearTimeout(timeoutId);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -245,15 +310,13 @@ export function AppShell({ children, onQuickAction }: AppShellProps) {
       >
         {syncAuthLocked && <SyncAuthModal />}
 
-        <AnimatePresence mode="wait" initial={false}>
-          <PageTransitionStage
-            routeKey={pathname}
-            direction={routeDirection}
-            className="flex-1 flex flex-col w-full"
-          >
-            {children}
-          </PageTransitionStage>
-        </AnimatePresence>
+        <PageTransitionStage
+          routeKey={pathname}
+          direction={routeDirection}
+          className="flex-1 flex flex-col w-full"
+        >
+          {children}
+        </PageTransitionStage>
 
         {/* Floating Undo Toast */}
         <UndoToast />
@@ -293,42 +356,48 @@ export function AppShell({ children, onQuickAction }: AppShellProps) {
           onClose={closeSheet}
         />
 
-        {/* Barcode Scanner Drawer */}
-        <BarcodeScannerDrawer
-          open={activeSheet === "barcode"}
-          date={activeDate}
-          mealSlot={activeMealSlot}
-          onClose={closeSheet}
-        />
+        {/* Lazy-loaded heavy drawers (chunks fetched & parsed only when opened) */}
+        {activeSheet === "barcode" && (
+          <BarcodeScannerDrawer
+            open
+            date={activeDate}
+            mealSlot={activeMealSlot}
+            onClose={closeSheet}
+          />
+        )}
 
-        {/* AI Meal Scanner Sheet */}
-        <AiMealScannerSheet
-          open={activeSheet === "ai-scan"}
-          date={activeDate}
-          mealSlot={activeMealSlot}
-          onClose={closeSheet}
-        />
+        {activeSheet === "ai-scan" && (
+          <AiMealScannerSheet
+            open
+            date={activeDate}
+            mealSlot={activeMealSlot}
+            onClose={closeSheet}
+          />
+        )}
 
-        {/* AI Meal Ideas Drawer */}
-        <AiMealIdeasDrawer
-          open={activeSheet === "meal-ideas"}
-          date={activeDate}
-          onClose={closeSheet}
-        />
+        {activeSheet === "meal-ideas" && (
+          <AiMealIdeasDrawer
+            open
+            date={activeDate}
+            onClose={closeSheet}
+          />
+        )}
 
-        {/* Weigh-In Drawer */}
-        <WeighInDrawer
-          open={activeSheet === "weight"}
-          initialEntry={editingWeight}
-          defaultDate={activeDate}
-          onClose={closeSheet}
-        />
+        {activeSheet === "weight" && (
+          <WeighInDrawer
+            open
+            initialEntry={editingWeight}
+            defaultDate={activeDate}
+            onClose={closeSheet}
+          />
+        )}
 
-        {/* Tap-to-Edit Logged Entry Drawer */}
-        <EditLogEntryDrawer
-          entry={editingEntry}
-          onClose={() => setEditingEntry(null)}
-        />
+        {editingEntry !== null && (
+          <EditLogEntryDrawer
+            entry={editingEntry}
+            onClose={() => setEditingEntry(null)}
+          />
+        )}
       </div>
     </div>
   );

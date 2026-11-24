@@ -650,7 +650,7 @@ describe('Task 8: Barcode Scanner & Missing-Barcode Creator', () => {
   });
 
   describe('AppShell Integration', () => {
-    test('opens BarcodeScannerDrawer when activeSheet is "barcode"', () => {
+    test('opens BarcodeScannerDrawer when activeSheet is "barcode"', async () => {
       render(
         <AppShell>
           <div>Main App</div>
@@ -661,7 +661,9 @@ describe('Task 8: Barcode Scanner & Missing-Barcode Creator', () => {
       const barcodeAction = screen.getByRole('button', { name: /barcode scan/i });
       fireEvent.click(barcodeAction);
 
-      expect(screen.getByRole('dialog', { name: /barcode scanner/i })).toBeInTheDocument();
+      expect(
+        await screen.findByRole('dialog', { name: /barcode scanner/i })
+      ).toBeInTheDocument();
     });
   });
 });

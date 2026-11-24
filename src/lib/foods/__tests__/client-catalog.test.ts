@@ -702,4 +702,82 @@ describe('client-catalog (OPFS/quota safety, worker bridge, cancellation, fallba
       unsub();
     });
   });
+
+  describe('Review Focus #4: warm-only idle preload (initIfCached)', () => {
+    it('returns false without fetching manifest or spawning worker when OPFS has no catalog-manifest.json, and still allows later init()', async () => {
+      const fetchMock = vi.fn().mockResolvedValue(
+        new Response(JSON.stringify(SAMPLE_MANIFEST), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      );
+      const createWorker = vi.fn(() => new MockCatalogWorker());
+      const controller = createClientCatalogController({
+        fetchImpl: fetchMock,
+        storage: {
+          getDirectory: vi.fn().mockResolvedValue({
+            getFileHandle: vi.fn().mockRejectedValue(new DOMException('NotFound', 'NotFoundError')),
+          }),
+          estimate: vi.fn().mockResolvedValue({ quota: 500_000_000, usage: 0 }),
+        },
+        createWorker,
+      });
+
+      const warmed = await controller.initIfCached();
+      expect(warmed).toBe(false);
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(createWorker).not.toHaveBeenCalled();
+      expect(controller.getState().status).toBe('idle');
+
+      // Explicit init() later still works normally
+      controller.init();
+      await vi.waitFor(() => {
+        expect(createWorker).toHaveBeenCalledTimes(1);
+      });
+    });
+
+    it('returns true and initializes worker when OPFS already contains catalog-manifest.json', async () => {
+      const fetchMock = vi.fn().mockResolvedValue(
+        new Response(JSON.stringify(SAMPLE_MANIFEST), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      );
+      const worker = new MockCatalogWorker();
+      const createWorker = vi.fn(() => worker);
+      const controller = createClientCatalogController({
+        fetchImpl: fetchMock,
+        storage: {
+          getDirectory: vi.fn().mockResolvedValue({
+            getFileHandle: vi.fn().mockResolvedValue({}),
+          }),
+          estimate: vi.fn().mockResolvedValue({ quota: 500_000_000, usage: 0 }),
+        },
+        createWorker,
+      });
+
+      const warmed = await controller.initIfCached();
+      expect(warmed).toBe(true);
+      await vi.waitFor(() => {
+        expect(createWorker).toHaveBeenCalledTimes(1);
+      });
+    });
+
+    it('returns false silently without entering fallback state when navigator.storage.getDirectory() throws', async () => {
+      const fetchMock = vi.fn();
+      const controller = createClientCatalogController({
+        fetchImpl: fetchMock,
+        storage: {
+          getDirectory: vi.fn().mockRejectedValue(new DOMException('SecurityError', 'SecurityError')),
+          estimate: vi.fn(),
+        },
+        createWorker: vi.fn(() => new MockCatalogWorker()),
+      });
+
+      const warmed = await controller.initIfCached();
+      expect(warmed).toBe(false);
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(controller.getState().status).toBe('idle');
+    });
+  });
 });

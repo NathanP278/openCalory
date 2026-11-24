@@ -34,9 +34,9 @@ export const SPRING_SHEET = {
 
 export const EASE_EXPRESSIVE = [0.22, 1, 0.36, 1] as const;
 
-export const DURATION_UI = 0.38;
-export const DURATION_PAGE = 0.48;
-export const DURATION_EXIT = 0.28;
+export const DURATION_UI = 0.28;
+export const DURATION_PAGE = 0.24;
+export const DURATION_EXIT = 0.16;
 
 export const ROUTE_ORDER = ["/", "/log", "/trends", "/recipes", "/settings"] as const;
 

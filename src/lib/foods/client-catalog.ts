@@ -37,6 +37,7 @@ export interface ClientCatalogDeps {
 
 export interface ClientCatalogController {
   init(): void;
+  initIfCached(): Promise<boolean>;
   getState(): CatalogSyncState;
   subscribe(cb: (state: CatalogSyncState) => void): () => void;
   search(
@@ -428,6 +429,33 @@ export function createClientCatalogController(
       void startWorkerInit();
     },
 
+    async initIfCached(): Promise<boolean> {
+      if (disposed) return false;
+      if (initialized) return true;
+
+      const storage = getStorage();
+      const canCreateWorker = Boolean(deps.createWorker || typeof Worker !== 'undefined');
+      if (!storage || typeof storage.getDirectory !== 'function' || !canCreateWorker) {
+        return false;
+      }
+
+      try {
+        const opfsRoot = (await storage.getDirectory()) as {
+          getFileHandle?: (name: string) => Promise<unknown>;
+        } | null;
+        if (!opfsRoot || typeof opfsRoot.getFileHandle !== 'function') {
+          return false;
+        }
+        await opfsRoot.getFileHandle('catalog-manifest.json');
+      } catch {
+        return false;
+      }
+
+      if (disposed) return false;
+      this.init();
+      return true;
+    },
+
     getState(): CatalogSyncState {
       return state;
     },
@@ -575,6 +603,10 @@ let defaultController: ClientCatalogController = createClientCatalogController()
 
 export function initClientCatalog(): void {
   defaultController.init();
+}
+
+export function initClientCatalogIfCached(): Promise<boolean> {
+  return defaultController.initIfCached();
 }
 
 export function getCatalogSyncState(): CatalogSyncState {

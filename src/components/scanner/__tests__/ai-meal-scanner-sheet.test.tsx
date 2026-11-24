@@ -451,7 +451,7 @@ describe('Task 10: AI Meal Scanner Sheet & HITL Review', () => {
   });
 
   // 8. AppShell integration and escape key close
-  test('AppShell renders AiMealScannerSheet when activeSheet is "ai-scan" and supports Escape key close', () => {
+  test('AppShell renders AiMealScannerSheet when activeSheet is "ai-scan" and supports Escape key close', async () => {
     render(
       <AppShell>
         <div>Content</div>
@@ -466,7 +466,7 @@ describe('Task 10: AI Meal Scanner Sheet & HITL Review', () => {
     const aiScanAction = screen.getByRole('button', { name: /ai meal scan/i });
     fireEvent.click(aiScanAction);
 
-    expect(screen.getByTestId('ai-meal-scanner-sheet')).toBeInTheDocument();
+    expect(await screen.findByTestId('ai-meal-scanner-sheet')).toBeInTheDocument();
 
     // Press Escape to close
     fireEvent.keyDown(window, { key: 'Escape' });

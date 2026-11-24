@@ -12,7 +12,6 @@ import {
   type Variants,
 } from "motion/react";
 import {
-  DURATION_EXIT,
   DURATION_PAGE,
   DURATION_UI,
   EASE_EXPRESSIVE,
@@ -58,12 +57,12 @@ export function PageTransitionStage({
     prefersReduced || isTest
       ? 0
       : direction === "forward"
-        ? 44
+        ? 20
         : direction === "backward"
-          ? -44
+          ? -20
           : 0;
-  const yOffset = prefersReduced || isTest ? 0 : direction ? 0 : 28;
-  const initialScale = prefersReduced || isTest ? 1 : 0.96;
+  const yOffset = prefersReduced || isTest ? 0 : direction ? 0 : 12;
+  const initialScale = prefersReduced || isTest ? 1 : 0.985;
 
   return (
     <motion.main
@@ -85,18 +84,8 @@ export function PageTransitionStage({
         y: 0,
         scale: 1,
       }}
-      exit={
-        isTest
-          ? undefined
-          : {
-              opacity: 0,
-              x: direction === "backward" ? 40 : -40,
-              scale: 0.96,
-              transition: { duration: DURATION_EXIT, ease: EASE_EXPRESSIVE },
-            }
-      }
       transition={{
-        duration: prefersReduced ? 0.16 : DURATION_PAGE,
+        duration: prefersReduced ? 0.12 : DURATION_PAGE,
         ease: EASE_EXPRESSIVE,
       }}
       className={className}
@@ -110,8 +99,8 @@ const staggerParentVariants: Variants = {
   hidden: {},
   visible: {
     transition: {
-      staggerChildren: 0.08,
-      delayChildren: 0.08,
+      staggerChildren: 0.04,
+      delayChildren: 0.02,
     },
   },
 };

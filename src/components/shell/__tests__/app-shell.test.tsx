@@ -362,4 +362,49 @@ describe('AppShell', () => {
       unmount();
     }
   });
+
+  it('debounces sessionStorage scroll persistence instead of writing synchronously on scroll and flushes on pagehide', () => {
+    vi.useFakeTimers();
+    try {
+      mockUsePathname.mockReturnValue('/log');
+      const setItemSpy = vi.spyOn(Storage.prototype, 'setItem');
+      const scrollWrites = () =>
+        setItemSpy.mock.calls.filter(([k]) => String(k) === 'macro_scroll_/log');
+
+      const { unmount } = render(
+        <AppShell>
+          <div>Scrollable Body</div>
+        </AppShell>
+      );
+      setItemSpy.mockClear();
+
+      Object.defineProperty(window, 'scrollY', { configurable: true, value: 120 });
+      for (let i = 0; i < 5; i++) {
+        window.dispatchEvent(new Event('scroll'));
+      }
+
+      // Never writes synchronously inside the scroll event handler
+      expect(scrollWrites()).toHaveLength(0);
+
+      // Debounced flush after idle (~250ms)
+      act(() => {
+        vi.advanceTimersByTime(300);
+      });
+      expect(scrollWrites()).toHaveLength(1);
+      expect(scrollWrites()[0][1]).toBe('120');
+
+      // Immediate flush on pagehide
+      Object.defineProperty(window, 'scrollY', { configurable: true, value: 340 });
+      window.dispatchEvent(new Event('scroll'));
+      expect(scrollWrites()).toHaveLength(1);
+
+      window.dispatchEvent(new Event('pagehide'));
+      expect(scrollWrites()).toHaveLength(2);
+      expect(scrollWrites()[1][1]).toBe('340');
+
+      unmount();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
