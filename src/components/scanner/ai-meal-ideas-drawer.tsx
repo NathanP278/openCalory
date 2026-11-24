@@ -223,7 +223,7 @@ export function AiMealIdeasDrawer({ open, date, onClose }: AiMealIdeasDrawerProp
       aria-modal="true"
       aria-label="AI Meal Ideas"
       data-testid="ai-meal-ideas-drawer"
-      className="modal-viewport-overlay z-50 flex flex-col justify-end sm:items-center sm:justify-center sm:p-6 bg-black/70 backdrop-blur-xs animate-backdrop-in"
+      className="modal-viewport-overlay z-50 flex flex-col justify-end sm:items-center sm:justify-center sm:p-6 bg-black/72 animate-backdrop-in"
       onClick={onClose}
     >
       <div

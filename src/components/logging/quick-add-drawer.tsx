@@ -252,7 +252,7 @@ function QuickAddContent({ date, mealSlot, onClose }: QuickAddContentProps) {
       animate={{ opacity: 1 }}
       exit={isTest ? undefined : { opacity: 0 }}
       transition={{ duration: 0.24, ease: EASE_EXPRESSIVE }}
-      className="modal-viewport-overlay z-50 flex flex-col justify-end sm:items-center sm:justify-center sm:p-6 bg-black/70 backdrop-blur-md"
+      className="modal-viewport-overlay z-50 flex flex-col justify-end sm:items-center sm:justify-center sm:p-6 bg-black/72"
       onClick={onClose}
     >
       <motion.div

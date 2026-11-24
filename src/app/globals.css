@@ -73,20 +73,20 @@
   color-scheme: dark;
   --background: #1e2229;
   --foreground: #f4f6fa;
-  --card: rgba(32, 37, 46, 0.56);
+  --card: rgba(32, 37, 46, 0.78);
   --card-foreground: #f4f6fa;
-  --popover: rgba(28, 32, 41, 0.76);
+  --popover: rgba(28, 32, 41, 0.88);
   --popover-foreground: #f4f6fa;
   --primary: #f4f6fa;
   --primary-foreground: #14171d;
-  --secondary: rgba(24, 28, 36, 0.54);
+  --secondary: rgba(24, 28, 36, 0.74);
   --secondary-foreground: #f4f6fa;
-  --muted: rgba(26, 30, 38, 0.52);
+  --muted: rgba(26, 30, 38, 0.72);
   --muted-foreground: #a5aebf;
-  --accent: rgba(46, 53, 66, 0.62);
+  --accent: rgba(46, 53, 66, 0.80);
   --accent-foreground: #f4f6fa;
   --destructive: #94a3b8;
-  --border: rgba(255, 255, 255, 0.08);
+  --border: rgba(255, 255, 255, 0.09);
   --border-hairline: rgba(255, 255, 255, 0.14);
   --input: rgba(255, 255, 255, 0.11);
   --ring: rgba(226, 232, 240, 0.72);
@@ -98,9 +98,9 @@
 
   /* Volumetric Neutral Liquid Glass Hierarchy (Dark Slate #1E2229) */
   --surface-canvas: #1e2229;
-  --surface-card: rgba(32, 37, 46, 0.56);
-  --surface-sub: rgba(18, 21, 28, 0.52);
-  --surface-elevated: rgba(26, 30, 39, 0.74);
+  --surface-card: rgba(32, 37, 46, 0.78);
+  --surface-sub: rgba(20, 24, 32, 0.74);
+  --surface-elevated: rgba(26, 30, 39, 0.86);
   --border-subtle: rgba(255, 255, 255, 0.08);
   --border-focus: rgba(255, 255, 255, 0.28);
 
@@ -217,14 +217,14 @@
     radial-gradient(720px circle at 24% 62%, rgba(203, 213, 225, 0.09), transparent 58%),
     radial-gradient(840px circle at 76% 92%, rgba(241, 245, 249, 0.10), transparent 56%);
   --canvas-ambient-secondary:
-    radial-gradient(520px circle at 52% 28%, rgba(255, 255, 255, 0.06), transparent 52%),
-    radial-gradient(640px circle at 16% 88%, rgba(148, 163, 184, 0.09), transparent 56%);
+    radial-gradient(660px circle at 52% 28%, rgba(255, 255, 255, 0.055), transparent 68%),
+    radial-gradient(780px circle at 16% 88%, rgba(148, 163, 184, 0.085), transparent 72%);
   --ease-out-quart: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-out-quint: cubic-bezier(0.16, 1, 0.3, 1);
 
   --canvas: #1e2229;
-  --tile: rgba(32, 37, 46, 0.56);
-  --tile-sub: rgba(18, 21, 28, 0.52);
+  --tile: rgba(32, 37, 46, 0.78);
+  --tile-sub: rgba(20, 24, 32, 0.74);
 
   /* MacroFactor nutrient palette (telemetry only: Blue Cal, Coral Protein, Gold Fat, Green Carbs) */
   --calorie: #6c8eff;
@@ -251,17 +251,17 @@
   color-scheme: light;
   --background: #f2f4f8;
   --foreground: #14171d;
-  --card: rgba(255, 255, 255, 0.52);
+  --card: rgba(255, 255, 255, 0.84);
   --card-foreground: #14171d;
-  --popover: rgba(255, 255, 255, 0.76);
+  --popover: rgba(255, 255, 255, 0.92);
   --popover-foreground: #14171d;
   --primary: #1e2229;
   --primary-foreground: #f8fafc;
-  --secondary: rgba(232, 236, 243, 0.58);
+  --secondary: rgba(232, 236, 243, 0.80);
   --secondary-foreground: #14171d;
-  --muted: rgba(228, 233, 241, 0.56);
+  --muted: rgba(228, 233, 241, 0.78);
   --muted-foreground: #525a69;
-  --accent: rgba(222, 227, 237, 0.68);
+  --accent: rgba(222, 227, 237, 0.84);
   --accent-foreground: #14171d;
   --destructive: #64748b;
   --border: rgba(15, 23, 42, 0.09);
@@ -271,9 +271,9 @@
 
   /* Volumetric Neutral Liquid Glass Hierarchy (Light Alabaster #F2F4F8 -> #FBFBFD) */
   --surface-canvas: #f2f4f8;
-  --surface-card: rgba(255, 255, 255, 0.52);
-  --surface-sub: rgba(228, 233, 241, 0.54);
-  --surface-elevated: rgba(255, 255, 255, 0.74);
+  --surface-card: rgba(255, 255, 255, 0.84);
+  --surface-sub: rgba(230, 235, 243, 0.78);
+  --surface-elevated: rgba(255, 255, 255, 0.90);
   --border-subtle: rgba(15, 23, 42, 0.09);
   --border-focus: rgba(15, 23, 42, 0.24);
 
@@ -387,12 +387,12 @@
     radial-gradient(720px circle at 22% 66%, rgba(203, 213, 225, 0.32), transparent 58%),
     radial-gradient(840px circle at 78% 90%, rgba(148, 163, 184, 0.18), transparent 56%);
   --canvas-ambient-secondary:
-    radial-gradient(560px circle at 50% 24%, rgba(255, 255, 255, 0.85), transparent 54%),
-    radial-gradient(620px circle at 82% 58%, rgba(226, 232, 240, 0.45), transparent 56%);
+    radial-gradient(680px circle at 50% 24%, rgba(255, 255, 255, 0.72), transparent 70%),
+    radial-gradient(760px circle at 82% 58%, rgba(226, 232, 240, 0.40), transparent 72%);
 
   --canvas: #f2f4f8;
-  --tile: rgba(255, 255, 255, 0.52);
-  --tile-sub: rgba(228, 233, 241, 0.54);
+  --tile: rgba(255, 255, 255, 0.84);
+  --tile-sub: rgba(230, 235, 243, 0.78);
 
   --calorie: #4f6fe6;
   --protein: #d45338;
@@ -457,7 +457,6 @@
   }
   body::after {
     background-image: var(--canvas-ambient-secondary);
-    filter: blur(42px);
   }
   /* Smooth translucent sheen sweep when toggling Dark <-> Light mode */
   html.theme-transitioning,
@@ -467,7 +466,6 @@
     transition:
       background 0.4s ease,
       background-color 0.4s ease,
-      backdrop-filter 0.4s ease,
       border-color 0.4s ease,
       box-shadow 0.4s ease,
       color 0.3s ease !important;
@@ -599,11 +597,21 @@
       visibility: hidden;
     }
   }
+  html.keyboard-open .surface-elevated-sheet {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background-color: color-mix(in srgb, var(--surface-elevated) 96%, var(--background));
+  }
+  html.keyboard-open .modal-viewport-sheet,
+  html.keyboard-open .modal-viewport-sheet * {
+    transition-property: opacity, transform, color, border-color;
+  }
+  /* Tier 1 Live Blur: Top-level floating chrome & elevated sheet frames (never nested) */
   .surface-elevated-sheet {
     background-color: var(--surface-elevated);
     background-image: var(--glass-sheen-strong);
-    backdrop-filter: blur(28px) saturate(165%);
-    -webkit-backdrop-filter: blur(28px) saturate(165%);
+    backdrop-filter: blur(18px) saturate(145%);
+    -webkit-backdrop-filter: blur(18px) saturate(145%);
     border: 1px solid var(--border-hairline);
     border-top-color: var(--glass-edge-light);
     border-left-color: var(--glass-edge-light);
@@ -614,10 +622,10 @@
     transform: translateZ(0);
   }
   .surface-floating-bar {
-    background-color: color-mix(in srgb, var(--surface-elevated) 84%, transparent);
+    background-color: color-mix(in srgb, var(--surface-elevated) 88%, transparent);
     background-image: var(--glass-sheen-strong);
-    backdrop-filter: blur(26px) saturate(165%);
-    -webkit-backdrop-filter: blur(26px) saturate(165%);
+    backdrop-filter: blur(16px) saturate(145%);
+    -webkit-backdrop-filter: blur(16px) saturate(145%);
     border: 1px solid var(--border-hairline);
     border-top-color: var(--glass-edge-light);
     border-left-color: var(--glass-edge-light);
@@ -627,11 +635,10 @@
     isolation: isolate;
     transform: translateZ(0);
   }
+  /* Tier 2 Optically Simulated Glass: Translucent sheen + specular rims, zero backdrop-filter */
   .surface-glass-card {
     background-color: var(--surface-card);
     background-image: var(--glass-sheen);
-    backdrop-filter: blur(24px) saturate(160%);
-    -webkit-backdrop-filter: blur(24px) saturate(160%);
     border: 1px solid var(--border);
     border-top-color: var(--glass-edge-light);
     border-left-color: var(--glass-edge-light);
@@ -642,8 +649,6 @@
   .surface-glass-pill {
     background-color: var(--surface-sub);
     background-image: var(--glass-pill-gradient);
-    backdrop-filter: blur(18px) saturate(160%);
-    -webkit-backdrop-filter: blur(18px) saturate(160%);
     border: 1px solid var(--border);
     border-top-color: var(--glass-edge-light);
     border-left-color: var(--glass-edge-light);
@@ -678,8 +683,6 @@
   .liquid-pill-glass {
     background-color: var(--surface-sub);
     background-image: var(--glass-pill-gradient);
-    backdrop-filter: blur(18px) saturate(160%);
-    -webkit-backdrop-filter: blur(18px) saturate(160%);
     border: 1px solid var(--border);
     border-top-color: var(--glass-edge-light);
     border-left-color: var(--glass-edge-light);
@@ -720,8 +723,6 @@
   /* Sunken glass cavity for search bars & recessed wells */
   .liquid-input-well {
     background-image: var(--glass-input-well);
-    backdrop-filter: blur(20px) saturate(155%);
-    -webkit-backdrop-filter: blur(20px) saturate(155%);
     border: 1px solid var(--border);
     border-top-color: var(--glass-edge-dark);
     border-left-color: var(--glass-edge-dark);
@@ -740,45 +741,42 @@
       inset 0 -2px 0 var(--glass-focus-edge),
       0 6px 18px -4px var(--glass-focus-glow);
   }
+  .food-search-row {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 76px;
+    contain: layout style paint;
+  }
 }
 
-/* Site-wide Volumetric Neutral Liquid Glass material layer */
+/* Site-wide Volumetric Neutral Liquid Glass material layer (Tier 2: zero nested backdrop-filter) */
 @layer components {
   .bg-card,
   .bg-surface-card {
     background-image: var(--glass-sheen);
-    backdrop-filter: blur(24px) saturate(160%);
-    -webkit-backdrop-filter: blur(24px) saturate(160%);
     border-top-color: var(--glass-edge-light);
     border-left-color: var(--glass-edge-light);
     border-right-color: var(--glass-edge-dark);
     border-bottom-color: var(--glass-edge-dark);
     box-shadow: var(--shadow-glass-card);
     transition:
-      background 0.4s ease,
-      background-color 0.4s ease,
-      backdrop-filter 0.4s ease,
-      border-color 0.3s ease,
-      box-shadow 0.3s ease;
-  }
-
-  .bg-surface-sub {
-    background-image: var(--glass-pill-gradient);
-    backdrop-filter: blur(18px) saturate(160%);
-    -webkit-backdrop-filter: blur(18px) saturate(160%);
-    box-shadow: var(--shadow-glass-pill);
-    transition:
-      background 0.4s ease,
-      background-color 0.4s ease,
-      backdrop-filter 0.4s ease,
+      background 0.3s ease,
+      background-color 0.3s ease,
       border-color 0.25s ease,
       box-shadow 0.25s ease;
   }
 
+  .bg-surface-sub {
+    background-image: var(--glass-pill-gradient);
+    box-shadow: var(--shadow-glass-pill);
+    transition:
+      background 0.25s ease,
+      background-color 0.25s ease,
+      border-color 0.2s ease,
+      box-shadow 0.2s ease;
+  }
+
   .bg-surface-elevated {
     background-image: var(--glass-sheen-strong);
-    backdrop-filter: blur(28px) saturate(165%);
-    -webkit-backdrop-filter: blur(28px) saturate(165%);
     border-top-color: var(--glass-edge-light);
     border-left-color: var(--glass-edge-light);
     border-right-color: var(--glass-edge-dark);

@@ -203,7 +203,7 @@ export function RecipePortionPickerModal({
       role="dialog"
       aria-modal="true"
       aria-label={`Log ${recipe.name}`}
-      className="fixed inset-0 z-50 flex flex-col justify-end sm:items-center sm:justify-center sm:p-4 pt-[max(1rem,env(safe-area-inset-top))] bg-black/70 backdrop-blur-xs animate-backdrop-in"
+      className="fixed inset-0 z-50 flex flex-col justify-end sm:items-center sm:justify-center sm:p-4 pt-[max(1rem,env(safe-area-inset-top))] bg-black/72 animate-backdrop-in"
       onClick={onClose}
     >
       <div

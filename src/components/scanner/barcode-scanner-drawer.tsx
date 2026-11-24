@@ -282,7 +282,7 @@ function BarcodeScannerContent({
         aria-modal="true"
         aria-label="Barcode Scanner"
         data-testid="barcode-scanner-drawer"
-        className="fixed inset-0 z-50 flex flex-col justify-end sm:items-center sm:justify-center sm:p-6 bg-black/70 backdrop-blur-xs animate-backdrop-in"
+        className="fixed inset-0 z-50 flex flex-col justify-end sm:items-center sm:justify-center sm:p-6 bg-black/72 animate-backdrop-in"
         onClick={onClose}
       >
         <div

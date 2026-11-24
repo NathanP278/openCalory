@@ -728,7 +728,7 @@ export function CustomFoodModal({
       role="dialog"
       aria-modal="true"
       aria-label={initialFood ? 'Edit Custom Food' : 'Create Custom Food'}
-      className="modal-viewport-overlay z-50 flex flex-col justify-end sm:items-center sm:justify-center sm:p-6 bg-black/70 backdrop-blur-xs animate-backdrop-in"
+      className="modal-viewport-overlay z-50 flex flex-col justify-end sm:items-center sm:justify-center sm:p-6 bg-black/72 animate-backdrop-in"
       onClick={onClose}
     >
       <div

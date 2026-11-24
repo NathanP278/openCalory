@@ -151,7 +151,7 @@ function CopyFromDateContent({
       animate={{ opacity: 1 }}
       exit={isTestEnvironment() ? undefined : { opacity: 0 }}
       transition={{ duration: 0.24, ease: EASE_EXPRESSIVE }}
-      className="fixed inset-0 z-50 flex flex-col justify-end sm:items-center sm:justify-center sm:p-6 bg-black/70 backdrop-blur-md"
+      className="fixed inset-0 z-50 flex flex-col justify-end sm:items-center sm:justify-center sm:p-6 bg-black/72"
       onClick={onClose}
     >
       <motion.div

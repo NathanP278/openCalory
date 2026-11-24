@@ -422,7 +422,7 @@ function CommandPaletteDialog() {
       animate={{ opacity: 1 }}
       exit={isTest ? undefined : { opacity: 0 }}
       transition={{ duration: 0.24, ease: EASE_EXPRESSIVE }}
-      className="fixed inset-0 z-50 flex items-start justify-center pt-[min(12dvh,5.5rem)] px-4 bg-black/60 backdrop-blur-md"
+      className="fixed inset-0 z-50 flex items-start justify-center pt-[min(12dvh,5.5rem)] px-4 bg-black/70"
       onClick={() => setOpen(false)}
     >
       <motion.div

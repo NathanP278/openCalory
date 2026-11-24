@@ -330,7 +330,7 @@ export function MotionModalOverlay({
           animate={{ opacity: 1 }}
           exit={isTest ? undefined : { opacity: 0 }}
           transition={{ duration: prefersReduced ? 0.14 : 0.28, ease: EASE_EXPRESSIVE }}
-          className={`modal-viewport-overlay z-50 flex ${containerAlign} bg-black/68 backdrop-blur-md ${backdropClassName}`}
+          className={`modal-viewport-overlay z-50 flex ${containerAlign} bg-black/72 ${backdropClassName}`}
           onClick={onClose}
         >
           <motion.div

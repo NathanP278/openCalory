@@ -420,7 +420,7 @@ export function BackupPanel({ className }: BackupPanelProps) {
           aria-modal="true"
           aria-label="Confirm replace backup import"
           data-testid="replace-confirm-modal"
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs animate-backdrop-in"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/72 animate-backdrop-in"
           onClick={handleCancelReplace}
         >
           <div
