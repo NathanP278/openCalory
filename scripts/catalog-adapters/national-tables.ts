@@ -509,7 +509,7 @@ export function parseCnfCsvDir(dir: string): Record<string, unknown>[] {
     const mapped =
       CNF_NUTRIENT_CODE_MAP[nutrientCode] ??
       CNF_NUTRIENT_SYMBOL_MAP[nutrientSymbol] ??
-      CNF_NUTRIENT_CODE_MAP[nutrientId];
+      (!nutrientCode && !nutrientSymbol ? CNF_NUTRIENT_CODE_MAP[nutrientId] : undefined);
     if (mapped) {
       nutrientIdToField.set(nutrientId, mapped);
     }
@@ -521,7 +521,9 @@ export function parseCnfCsvDir(dir: string): Record<string, unknown>[] {
     const foodId = getFieldCaseInsensitive(row, ['FoodID']);
     const nutrientId = getFieldCaseInsensitive(row, ['NutrientID']);
     if (!foodId || !nutrientId) continue;
-    const field = nutrientIdToField.get(nutrientId) ?? CNF_NUTRIENT_CODE_MAP[nutrientId];
+    const field =
+      nutrientIdToField.get(nutrientId) ??
+      (nutrientNameRows.length === 0 ? CNF_NUTRIENT_CODE_MAP[nutrientId] : undefined);
     if (!field) continue;
 
     const val = toNum(getFieldCaseInsensitive(row, ['NutrientValue']));

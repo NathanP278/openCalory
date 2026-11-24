@@ -125,6 +125,48 @@ describe('National tables adapter: CNF & Ciqual parsers and auto-downloaders', (
     expect(parseCnfCsvDir(dir)).toEqual([]);
   });
 
+  test('parseCnfCsvDir does not misclassify an unrelated nutrient whose NutrientID collides with a CNF code (e.g. NutrientID=208, NutrientCode=401, VITC)', () => {
+    const dir = makeTempDir('cnf-collision-');
+    tempDirs.push(dir);
+
+    fs.writeFileSync(
+      path.join(dir, 'FOOD NAME.csv'),
+      ['FoodID,FoodCode,FoodGroupID,FoodDescription', '501,5001,1,"Orange, raw"'].join('\n'),
+      'utf8'
+    );
+    fs.writeFileSync(
+      path.join(dir, 'NUTRIENT NAME.csv'),
+      [
+        'NutrientID,NutrientCode,NutrientSymbol,NutrientUnit,NutrientName',
+        '1,208,KCAL,kCal,ENERGY (KILOCALORIES)',
+        '2,203,PROT,g,PROTEIN',
+        '3,205,CARB,g,CARBOHYDRATE',
+        '4,204,FAT,g,FAT',
+        '208,401,VITC,mg,VITAMIN C',
+      ].join('\n'),
+      'utf8'
+    );
+    fs.writeFileSync(
+      path.join(dir, 'NUTRIENT AMOUNT.csv'),
+      [
+        'FoodID,NutrientID,NutrientValue',
+        '501,1,47',
+        '501,2,0.94',
+        '501,3,11.75',
+        '501,4,0.12',
+        '501,208,53.2',
+      ].join('\n'),
+      'utf8'
+    );
+
+    const rows = parseCnfCsvDir(dir);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].calories).toBe(47);
+    expect(rows[0].protein).toBe(0.94);
+    expect(rows[0].carbs).toBe(11.75);
+    expect(rows[0].fat).toBe(0.12);
+  });
+
   test('parseCiqualCsvText parses semicolon-delimited French/English Ciqual rows with decimal commas, "< 0,5", "-", and "traces"', () => {
     const frenchCsv = [
       'alim_code;alim_nom_fr;alim_grp_nom_fr;Energie, Règlement UE N° 1169/2011 (kJ/100 g);Energie, Règlement UE N° 1169/2011 (kcal/100 g);Protéines, N x facteur de Jones (g/100 g);Glucides (g/100 g);Lipides (g/100 g);Fibres alimentaires (g/100 g);Sodium (mg/100 g);Sucres (g/100 g);AG saturés (g/100 g)',
