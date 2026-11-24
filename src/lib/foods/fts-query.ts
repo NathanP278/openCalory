@@ -222,21 +222,39 @@ export function scoreCandidate(
 
   let score = Math.min(Math.max(-bm25, 0), 40);
 
-  const hasExactWholeWordInName = (qt: string): boolean =>
-    nameTokenSet.has(qt) ||
-    nameTokenSet.has(`${qt}s`) ||
-    (qt.endsWith('s') && qt.length > 3 && nameTokenSet.has(qt.slice(0, -1)));
+  const hasExactWholeWordInSet = (qt: string, tokenSet: Set<string>): boolean =>
+    tokenSet.has(qt) ||
+    tokenSet.has(`${qt}s`) ||
+    (qt.endsWith('s') && qt.length > 3 && tokenSet.has(qt.slice(0, -1)));
 
   const allQueryTokensExactInName =
-    queryTokens.length > 0 && queryTokens.every((qt) => hasExactWholeWordInName(qt));
+    queryTokens.length > 0 && queryTokens.every((qt) => hasExactWholeWordInSet(qt, nameTokenSet));
+
+  // Best unordered exact-token match against any individual alias (e.g. "japanese white rice" for "white japanese rice")
+  let bestAliasPrecision = 0;
+  if (queryTokens.length > 0 && aliasParts.length > 0) {
+    for (const aliasPart of aliasParts) {
+      const aTokens = aliasPart.split(' ');
+      const aSet = new Set(aTokens);
+      if (queryTokens.every((qt) => hasExactWholeWordInSet(qt, aSet))) {
+        const precision = Math.min(1, queryTokens.length / Math.max(aTokens.length, 1));
+        if (precision > bestAliasPrecision) {
+          bestAliasPrecision = precision;
+        }
+      }
+    }
+  }
 
   // Exact name / alias / prefix boosts
   if (nameNorm === queryNorm) {
     score += 140;
   } else if (aliasParts.includes(queryNorm)) {
     score += 105;
+  } else if (bestAliasPrecision > 0 && !allQueryTokensExactInName) {
+    score += 25 + 65 * bestAliasPrecision;
   } else if (allQueryTokensExactInName) {
-    score += 75;
+    const namePrecision = Math.min(1, queryTokens.length / Math.max(nameTokens.length, 1));
+    score += Math.max(25 + 50 * namePrecision, bestAliasPrecision > 0 ? 25 + 65 * bestAliasPrecision : 0);
     if (
       nameNorm.startsWith(`${queryNorm} `) ||
       row.name.toLowerCase().startsWith(`${queryNorm},`) ||

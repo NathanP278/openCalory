@@ -221,14 +221,16 @@ function extractFoodGroups(category?: string): Set<string> {
   return groups;
 }
 
-function areFoodGroupsCompatible(catA?: string, catB?: string): boolean {
-  const groupsA = extractFoodGroups(catA);
-  const groupsB = extractFoodGroups(catB);
+function areFoodGroupSetsCompatible(groupsA: Set<string>, groupsB: Set<string>): boolean {
   if (groupsA.size === 0 || groupsB.size === 0) return true;
   for (const g of groupsA) {
     if (groupsB.has(g)) return true;
   }
   return false;
+}
+
+function areFoodGroupsCompatible(catA?: string, catB?: string): boolean {
+  return areFoodGroupSetsCompatible(extractFoodGroups(catA), extractFoodGroups(catB));
 }
 
 function extractCoreTokens(name: string, brand?: string): Set<string> {
@@ -451,6 +453,7 @@ interface CompileCluster {
   canonicalKey: string;
   brand: string;
   prepState: PrepState;
+  foodGroups: Set<string>;
   coreTokens: Set<string>;
 }
 
@@ -476,6 +479,7 @@ function createCompileCluster(item: CatalogFoodInput, index: number): CompileClu
     canonicalKey: buildCanonicalFoodKey(item.name, item.brand),
     brand: normalizeBrand(item.brand),
     prepState: extractPrepState(item.name),
+    foodGroups: extractFoodGroups(item.category),
     coreTokens: extractCoreTokens(item.name, item.brand),
   };
 }
@@ -493,6 +497,7 @@ function mergeCompileClusters(target: CompileCluster, source: CompileCluster): v
   target.canonicalKey = buildCanonicalFoodKey(target.rep.name, target.rep.brand);
   target.brand = normalizeBrand(target.rep.brand);
   target.prepState = extractPrepState(target.rep.name);
+  target.foodGroups = extractFoodGroups(target.rep.category);
   target.coreTokens = extractCoreTokens(target.rep.name, target.rep.brand);
 }
 
@@ -604,26 +609,39 @@ export function deduplicateCatalogRecords(inputs: CatalogFoodInput[]): DedupeCom
   };
 
   for (const cluster of passBClusters) {
-    const candidateIndices = new Set<number>();
+    const tokenCount = cluster.coreTokens.size;
+    // Exact prefix filter for Jaccard >= 0.75: at most floor(0.25 * |A|) tokens of A
+    // can be absent from any matching B, so checking the (floor(0.25 * |A|) + 1)
+    // smallest buckets guarantees 100% recall while avoiding giant stop-token buckets.
+    const prefixLen = Math.floor(0.25 * tokenCount) + 1;
+    const tokenBucketList: Array<number[] | undefined> = [];
     for (const token of cluster.coreTokens) {
-      const bucket = tokenBuckets.get(`${cluster.brand}\0${token}`);
+      tokenBucketList.push(tokenBuckets.get(`${cluster.brand}\0${token}`));
+    }
+    if (tokenBucketList.length > prefixLen) {
+      tokenBucketList.sort((a, b) => (a ? a.length : 0) - (b ? b.length : 0));
+    }
+
+    const candidateIndices = new Set<number>();
+    const limit = Math.min(prefixLen, tokenBucketList.length);
+    for (let t = 0; t < limit; t++) {
+      const bucket = tokenBucketList[t];
       if (!bucket) continue;
-      for (const idx of bucket) {
-        candidateIndices.add(idx);
+      for (let b = 0; b < bucket.length; b++) {
+        candidateIndices.add(bucket[b]);
       }
     }
 
     let matchedIdx = -1;
     for (const idx of candidateIndices) {
       const target = passCClusters[idx];
-      if (!canMergeCompileClusters(target, cluster)) continue;
-      if (target.brand !== cluster.brand) continue;
-      if (!arePrepStatesCompatible(target.prepState, cluster.prepState)) continue;
-      if (!areFoodGroupsCompatible(target.rep.category, cluster.rep.category)) continue;
-
-      const minSize = Math.min(target.coreTokens.size, cluster.coreTokens.size);
-      const maxSize = Math.max(target.coreTokens.size, cluster.coreTokens.size);
+      const minSize = Math.min(target.coreTokens.size, tokenCount);
+      const maxSize = Math.max(target.coreTokens.size, tokenCount);
       if (maxSize === 0 || minSize / maxSize < 0.75) continue;
+      if (target.brand !== cluster.brand) continue;
+      if (!canMergeCompileClusters(target, cluster)) continue;
+      if (!arePrepStatesCompatible(target.prepState, cluster.prepState)) continue;
+      if (!areFoodGroupSetsCompatible(target.foodGroups, cluster.foodGroups)) continue;
 
       if (jaccardSimilarity(target.coreTokens, cluster.coreTokens) < 0.75) continue;
       if (!areMacrosSimilar(target.rep, cluster.rep)) continue;

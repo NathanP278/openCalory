@@ -262,7 +262,9 @@ export async function runBuildFoodCatalogCli(argv: string[]): Promise<CatalogMan
     try {
       const loaded = await adapter.load(loadOpts);
       console.log(`[food-db:build] Adapter "${adapter.id}" contributed ${loaded.length} raw record(s).`);
-      allRecords.push(...loaded);
+      for (const item of loaded) {
+        allRecords.push(item);
+      }
     } catch (err) {
       console.warn(
         `[food-db:build] Adapter "${adapter.id}" failed and was skipped: ${

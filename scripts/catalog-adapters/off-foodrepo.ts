@@ -650,7 +650,9 @@ export const offFoodRepoAdapter: CatalogAdapter = {
         if (file.toLowerCase().endsWith('.jsonl') || file.toLowerCase().endsWith('.ndjson')) {
           const items = await streamOffJsonlFile(path.join(offDir, file), options.tier);
           console.log(`[off] Loaded ${items.length} products from ${file}`);
-          results.push(...items);
+          for (const item of items) {
+            results.push(item);
+          }
         }
       }
     } else {
@@ -662,7 +664,9 @@ export const offFoodRepoAdapter: CatalogAdapter = {
         if (file.toLowerCase().endsWith('.json')) {
           const items = parseFoodRepoJson(fs.readFileSync(path.join(foodRepoDir, file), 'utf8'));
           console.log(`[foodrepo] Loaded ${items.length} products from ${file}`);
-          results.push(...items);
+          for (const item of items) {
+            results.push(item);
+          }
         }
       }
     } else {

@@ -313,20 +313,25 @@ function searchDb(
       mergeCandidates(runFtsMatchQuery(db, strippedMatch, fetchLimit));
     }
 
-    // Fallback 2: Relaxed OR prefix query
-    if (candidates.size < 5 && tokens.length >= 2) {
-      const orMatch = tokens.map((t) => `"${t}"*`).join(' OR ');
-      mergeCandidates(runFtsMatchQuery(db, orMatch, fetchLimit));
-    }
-
-    // Fallback 3: 3-char prefix match for typo tolerance
+    // Fallback 2: 3-char prefix AND match for typo tolerance
     if (candidates.size < 5) {
       const prefixTokens = tokens.map((t) => (t.length >= 3 ? t.slice(0, 3) : t));
       const uniquePrefixes = Array.from(new Set(prefixTokens));
       const prefixAndMatch = uniquePrefixes.map((t) => `"${t}"*`).join(' ');
       mergeCandidates(runFtsMatchQuery(db, prefixAndMatch, fetchLimit));
+    }
 
-      if (candidates.size < 5 && uniquePrefixes.length >= 2) {
+    // Fallback 3: Relaxed OR prefix query
+    if (candidates.size < 5 && tokens.length >= 2) {
+      const orMatch = tokens.map((t) => `"${t}"*`).join(' OR ');
+      mergeCandidates(runFtsMatchQuery(db, orMatch, fetchLimit));
+    }
+
+    // Fallback 4: 3-char prefix OR match
+    if (candidates.size < 5 && tokens.length >= 2) {
+      const prefixTokens = tokens.map((t) => (t.length >= 3 ? t.slice(0, 3) : t));
+      const uniquePrefixes = Array.from(new Set(prefixTokens));
+      if (uniquePrefixes.length >= 2) {
         const prefixOrMatch = uniquePrefixes.map((t) => `"${t}"*`).join(' OR ');
         mergeCandidates(runFtsMatchQuery(db, prefixOrMatch, fetchLimit));
       }
