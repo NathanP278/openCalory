@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { ThemeProvider } from "@/components/theme/theme-provider";
 import { PwaRegister } from "@/components/shell/pwa-register";
+import { VisualViewportSync } from "@/components/shell/visual-viewport-sync";
 import { AppBootGate } from "@/components/shell/app-boot-gate";
 import { MotionRoot } from "@/components/motion/motion-primitives";
 import { RouteDirectionProvider } from "@/components/motion/route-direction-context";
@@ -49,6 +50,7 @@ export const viewport: Viewport = {
   maximumScale: 1,
   userScalable: false,
   viewportFit: "cover",
+  interactiveWidget: "resizes-content",
   themeColor: [
     { media: "(prefers-color-scheme: dark)", color: "#1e2229" },
     { media: "(prefers-color-scheme: light)", color: "#f2f4f8" },
@@ -71,6 +73,7 @@ export default function RootLayout({
           <MotionRoot>
             <RouteDirectionProvider>
               <PwaRegister />
+              <VisualViewportSync />
               <AppBootGate>{children}</AppBootGate>
             </RouteDirectionProvider>
           </MotionRoot>

@@ -63,7 +63,7 @@ export function BottomNav({ onOpenQuickActions, onDirectAction }: BottomNavProps
   return (
     <div
       style={{ viewTransitionName: "bottom-chrome" }}
-      className="fixed bottom-0 left-0 right-0 z-40 pointer-events-none lg:hidden bg-gradient-to-t from-background/92 via-background/55 to-transparent pt-5"
+      className="mobile-bottom-chrome fixed bottom-0 left-0 right-0 z-40 pointer-events-none lg:hidden bg-gradient-to-t from-background/92 via-background/55 to-transparent pt-5"
     >
       {/* Persistent Quick Search Strip on Dashboard & Food Log */}
       <AnimatePresence initial={false}>

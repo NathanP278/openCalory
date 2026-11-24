@@ -303,7 +303,7 @@ export function HitlVerificationSwapModal({
       role="dialog"
       aria-modal="true"
       aria-label={targetItem ? 'Verify or swap food' : 'Add ingredient'}
-      className="fixed inset-0 z-50 flex flex-col justify-end sm:items-center sm:justify-center sm:p-6 bg-black/70 backdrop-blur-xs animate-backdrop-in"
+      className="modal-viewport-overlay z-50 flex flex-col justify-end sm:items-center sm:justify-center sm:p-6 bg-black/70 backdrop-blur-xs animate-backdrop-in"
       onClick={onClose}
     >
       <div

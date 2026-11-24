@@ -565,6 +565,31 @@
   .touch-target {
     position: relative;
   }
+  .modal-viewport-overlay {
+    position: fixed;
+    left: 0;
+    right: 0;
+    top: var(--vv-offset-top, 0px);
+    height: var(--vvh, 100dvh);
+    overflow: hidden;
+    overscroll-behavior: contain;
+  }
+  .modal-viewport-sheet {
+    max-height: min(
+      90dvh,
+      calc(var(--vvh, 100dvh) - max(0.75rem, env(safe-area-inset-top, 0px)))
+    );
+  }
+  html.keyboard-open .modal-viewport-sheet {
+    padding-bottom: 0.75rem;
+  }
+  @media (max-width: 1023px) {
+    html.keyboard-open .mobile-bottom-chrome {
+      opacity: 0;
+      pointer-events: none;
+      visibility: hidden;
+    }
+  }
   .surface-elevated-sheet {
     background-color: var(--surface-elevated);
     background-image: var(--glass-sheen-strong);

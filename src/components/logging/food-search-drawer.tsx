@@ -1054,7 +1054,7 @@ function FoodSearchContent({ date, mealSlot, onClose }: FoodSearchContentProps) 
       animate={{ opacity: 1 }}
       exit={isTestEnvironment() ? undefined : { opacity: 0 }}
       transition={{ duration: 0.24, ease: EASE_EXPRESSIVE }}
-      className="fixed inset-0 z-50 flex flex-col justify-end sm:items-center sm:justify-center sm:p-6 bg-black/70 backdrop-blur-md"
+      className="modal-viewport-overlay z-50 flex flex-col justify-end sm:items-center sm:justify-center sm:p-6 bg-black/70 backdrop-blur-md"
       onClick={onClose}
     >
       <motion.div
@@ -1063,7 +1063,7 @@ function FoodSearchContent({ date, mealSlot, onClose }: FoodSearchContentProps) 
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={isTestEnvironment() ? undefined : { opacity: 0, y: 36, scale: 0.95 }}
         transition={SPRING_SHEET}
-        className="w-full max-w-lg lg:max-w-2xl mx-auto surface-elevated-sheet rounded-t-3xl sm:rounded-3xl px-4 sm:px-5 pt-3 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:pb-5 max-h-[90dvh] flex flex-col"
+        className="modal-viewport-sheet w-full max-w-lg lg:max-w-2xl mx-auto surface-elevated-sheet rounded-t-3xl sm:rounded-3xl px-4 sm:px-5 pt-3 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:pb-5 flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         <div
