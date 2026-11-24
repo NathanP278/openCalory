@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.2.5] - 2026-11-25
+
+### Added
+- **147,674 Verified Foods — 14× Offline Database Mega-Expansion**:
+  - **~150k Multi-Source Built-In Catalog**: Scaled from 10,500+ to **147,674 deduplicated foods** compiled directly into the app (`public/data/food-catalog.db.gz`) with zero runtime external downloads required on Vercel or user devices.
+  - **Balanced Global & Whole-Food Coverage**: Unifies **USDA FoodData Central** (Foundation, SR Legacy, FNDDS, plus a 25,000-item high-completeness USDA Branded slice), **Health Canada's Canadian Nutrient File (CNF)**, **24-country region-balanced Open Food Facts** (125,551 packaged products across SEA, East Asia, Europe, Oceania, India, LatAm, Canada, and US), and curated regional & restaurant packs.
+  - **Blazing Sub-10ms Search at 15× Scale**: Upgraded FTS5 ranking and prefix filtering delivers a **6.98 ms median query latency** across 147,674 foods completely offline in OPFS SQLite-WASM—preserving whole-food top rankings and natural household serving units (`pc`, `cup`, `bowl`, `slice`, `oz`, `g`).
+  - **21.31 MB Compressed Footprint**: Streaming multi-source compilation, exact Jaccard Pass C deduplication, and gzip compression pack 91.04 MB of indexed nutrition data into just **21.31 MB** over the wire.
+- **Streaming Compiler & National Table Auto-Downloaders**:
+  - Added bounded 3-pass streaming CSV ingestion for USDA Branded Foods (`25,000` cap) and automatic open-data downloaders/parsers for Health Canada CNF and France ANSES-Ciqual with HTML error-page protection and `NutrientID` collision guards.
+
+### Changed
+- **Upgraded Deduplication & Ranking for 150k Scale**: Replaced quadratic Pass C candidate scanning with an exact Jaccard prefix filter (`floor(0.25 * |A|) + 1`), eliminated V8 spread call-stack limits on 125k+ record merges, and tuned FTS5 name-precision scoring so concise whole foods outrank verbose branded variants.
+- **Unified Zero-Fetch Deployment**: Committed the full 147,674-food database directly in the repository for instant zero-config Vercel deployments and offline PWA sync.
+
+### Fixed
+- **Mobile Search Ergonomics**: Pinned the food search drawer input cleanly above the on-screen keyboard on mobile viewports.
+
 ## [v0.2.0] - 2026-11-24
 
 ### Added
@@ -93,5 +111,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added GitHub community health files: Code of Conduct, Contributing guide, Issue templates, Pull Request template, and Security Policy.
 - Added self-hosting setup guide and environment variable documentation.
 
+[v0.2.5]: https://github.com/NathanP278/openCalory/compare/v0.2.0...v0.2.5
 [v0.2.0]: https://github.com/NathanP278/openCalory/compare/v0.1.0...v0.2.0
 [v0.1.0]: https://github.com/NathanP278/openCalory/releases/tag/v0.1.0

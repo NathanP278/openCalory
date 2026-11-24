@@ -74,7 +74,7 @@ Browser (PWA)
  │    ├── foodLogs, foodsCache, customRecipes, userGoals
  │    ├── weightLogs, pinnedFoods, tombstones
  │    └── Central Sync Middleware (pushes mutations & merges on startup)
- └── OPFS SQLite-WASM Web Worker (`food-catalog.db.gz` — 10,500+ verified foods, <25ms FTS5)
+ └── OPFS SQLite-WASM Web Worker (`food-catalog.db.gz` — 147,674 verified foods, <10ms FTS5)
          │
          ▼  (Optional / Live API calls)
 Next.js Server (Route Handlers)
