@@ -50,6 +50,9 @@ macroai.db*
 !/data/curated/
 /data/catalog/
 
+# rust build artifacts
+/tools/catalog-dedup/target/
+
 # AI agents & assistant artifacts
 AGENTS.md
 CLAUDE.md

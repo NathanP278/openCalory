@@ -11,7 +11,9 @@
     "test:watch": "vitest",
     "food-db:build": "npx tsx scripts/build-food-catalog.ts --tier=core",
     "food-db:build:expanded": "npx tsx scripts/build-food-catalog.ts --tier=expanded",
-    "food-db:pull": "npx tsx scripts/pull-food-catalog.ts"
+    "food-db:pull": "npx tsx scripts/pull-food-catalog.ts",
+    "food-db:audit": "cargo run --release --manifest-path tools/catalog-dedup/Cargo.toml -- audit --input public/data/food-catalog.db.gz",
+    "food-db:dedup": "cargo run --release --manifest-path tools/catalog-dedup/Cargo.toml -- compact --input public/data/food-catalog.db.gz --output-gz public/data/food-catalog.db.gz --manifest public/data/catalog-manifest.json"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",
