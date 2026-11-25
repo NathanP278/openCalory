@@ -330,8 +330,27 @@ export async function lookupServerCatalogBarcode(barcode: string): Promise<FoodI
     args: [...candidates, normalized ?? candidates[0]],
   });
 
-  if (res.rows.length === 0) return null;
-  return catalogRowToFoodItem(toCatalogFoodRow(res.rows[0]));
+  if (res.rows.length > 0) {
+    return catalogRowToFoodItem(toCatalogFoodRow(res.rows[0]));
+  }
+
+  try {
+    const aliasRes = await client.execute({
+      sql: `SELECT f.rowid, f.*
+            FROM food_barcode_aliases b
+            JOIN foods f ON f.id = b.canonical_id
+            WHERE b.barcode IN (${placeholders})
+            ORDER BY CASE WHEN b.barcode = ? THEN 0 ELSE 1 END,
+                     f.accuracy_tier ASC,
+                     f.search_rank DESC
+            LIMIT 1`,
+      args: [...candidates, normalized ?? candidates[0]],
+    });
+    if (aliasRes.rows.length === 0) return null;
+    return catalogRowToFoodItem(toCatalogFoodRow(aliasRes.rows[0]));
+  } catch {
+    return null;
+  }
 }
 
 export async function resolveServerLegacyIds(

@@ -27,7 +27,8 @@ import { GET as getCatalogRoute } from '@/app/api/foods/catalog/route';
 
 async function buildTempCatalogDir(
   foods: CatalogFoodInput[],
-  legacyAliases: Array<{ legacyId: string; canonicalId: string }> = []
+  legacyAliases: Array<{ legacyId: string; canonicalId: string }> = [],
+  barcodeAliases: Array<{ barcode: string; canonicalId: string }> = []
 ): Promise<{ dir: string; manifest: CatalogManifest; gzipBytes: Buffer }> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'opencalory-test-catalog-'));
   const rawDbPath = path.join(dir, 'temp-build.db');
@@ -79,6 +80,13 @@ async function buildTempCatalogDir(
       await client.execute({
         sql: `INSERT INTO food_id_aliases (legacy_id, canonical_id) VALUES (?, ?)`,
         args: [alias.legacyId, alias.canonicalId],
+      });
+    }
+
+    for (const alias of barcodeAliases) {
+      await client.execute({
+        sql: `INSERT INTO food_barcode_aliases (barcode, canonical_id) VALUES (?, ?)`,
+        args: [alias.barcode, alias.canonicalId],
       });
     }
   } finally {
@@ -270,6 +278,41 @@ describe('server-catalog', () => {
       // Unknown barcode returns null
       expect(await lookupServerCatalogBarcode('9999999999999')).toBeNull();
       expect(await lookupServerCatalogBarcode('abc')).toBeNull();
+    });
+
+    it('resolves merged store-brand barcodes via food_barcode_aliases fallback', async () => {
+      const temp = await buildTempCatalogDir(
+        [
+          {
+            id: 'catalog:usda:pb-canonical',
+            barcode: '0051500255162',
+            source: 'usda',
+            sourceProvider: 'usda_foundation',
+            accuracyTier: 1,
+            region: 'US',
+            category: 'Nut Butters',
+            name: 'Peanut Butter, Creamy',
+            basis: 'per100g',
+            servingSize: 32,
+            servingUnit: 'tbsp',
+            servingWeightGrams: 32,
+            nutrientsPerBasis: { calories: 598, protein: 22, carbs: 22, fat: 51, fiber: 5 },
+            micronutrientsPerBasis: {},
+            updatedAt: 0,
+          },
+        ],
+        [],
+        [{ barcode: '0011110838049', canonicalId: 'catalog:usda:pb-canonical' }]
+      );
+      tempDirs.push(temp.dir);
+      process.env.FOOD_CATALOG_DIR = temp.dir;
+      resetServerCatalogCache();
+
+      // 12-digit UPC-A of merged store-brand jar resolves to canonical Peanut Butter
+      const resolved = await lookupServerCatalogBarcode('011110838049');
+      expect(resolved).not.toBeNull();
+      expect(resolved!.id).toBe('catalog:usda:pb-canonical');
+      expect(resolved!.name).toBe('Peanut Butter, Creamy');
     });
 
     it('resolves known legacy staple:* / ph:* IDs from food_id_aliases in the real catalog', async () => {

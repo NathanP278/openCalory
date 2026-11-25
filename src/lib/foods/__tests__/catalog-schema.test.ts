@@ -115,6 +115,16 @@ describe('catalog-schema', () => {
         args: ['staple:white-rice'],
       });
       expect(aliasRes.rows[0].canonical_id).toBe('catalog:usda:169756');
+
+      await client.execute({
+        sql: `INSERT INTO food_barcode_aliases (barcode, canonical_id) VALUES (?, ?)`,
+        args: ['0049000042566', 'catalog:usda:169756'],
+      });
+      const barcodeAliasRes = await client.execute({
+        sql: `SELECT canonical_id FROM food_barcode_aliases WHERE barcode = ?`,
+        args: ['0049000042566'],
+      });
+      expect(barcodeAliasRes.rows[0].canonical_id).toBe('catalog:usda:169756');
     } finally {
       client.close();
     }

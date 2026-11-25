@@ -57,6 +57,11 @@ CREATE TABLE IF NOT EXISTS food_id_aliases (
   legacy_id TEXT PRIMARY KEY,
   canonical_id TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS food_barcode_aliases (
+  barcode TEXT PRIMARY KEY,
+  canonical_id TEXT NOT NULL
+);
 `;
 
 export interface CatalogFoodRow {

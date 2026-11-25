@@ -371,8 +371,27 @@ function lookupBarcodeInDb(db: Database, barcode: string): FoodItem | null {
     [...candidates, normalized ?? candidates[0]]
   );
 
-  if (rows.length === 0) return null;
-  return catalogRowToFoodItem(rowRecordToCatalogFoodRow(rows[0]));
+  if (rows.length > 0) {
+    return catalogRowToFoodItem(rowRecordToCatalogFoodRow(rows[0]));
+  }
+
+  try {
+    const aliasRows = db.selectObjects(
+      `SELECT f.*
+       FROM food_barcode_aliases b
+       JOIN foods f ON f.id = b.canonical_id
+       WHERE b.barcode IN (${placeholders})
+       ORDER BY CASE WHEN b.barcode = ? THEN 0 ELSE 1 END,
+                f.accuracy_tier ASC,
+                f.search_rank DESC
+       LIMIT 1`,
+      [...candidates, normalized ?? candidates[0]]
+    );
+    if (aliasRows.length === 0) return null;
+    return catalogRowToFoodItem(rowRecordToCatalogFoodRow(aliasRows[0]));
+  } catch {
+    return null;
+  }
 }
 
 function resolveLegacyIdsInDb(db: Database, legacyIds: string[]): Array<[string, FoodItem]> {
