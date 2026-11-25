@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v0.2.6] - 2026-11-25
+
+### Added
+- **Rust `catalog-dedup` CLI & Deep Catalog Auditing**:
+  - Built a dedicated native Rust deduplication and hygiene engine (`tools/catalog-dedup`) featuring multi-stage clustering, deep normalization, nutrition merging, and automated quality auditing across 100k+ food records.
+- **Zero-Loss Barcode Aliasing (`food_barcode_aliases`)**:
+  - Added a dedicated `food_barcode_aliases` schema table and fallback barcode lookup path so merged and deduplicated products retain 100% of their regional and packaging barcodes during camera scans.
+
+### Changed
+- **Leaner, Cleaner 130,362-Food Offline Database**:
+  - Deep-compacted the built-in SQLite FTS5 catalog via the new Rust deduplication pipeline, consolidating 147,674 raw entries into **130,362 cleaner, higher-signal foods** and trimming the compressed download footprint to **20.17 MiB** (83.39 MiB uncompressed) with zero loss of barcode or regional coverage.
+- **Snappier Search, Shell & Tiered Liquid Glass Performance**:
+  - Decomposed `FoodSearchDrawer` into memoized subcomponents with CSS containment, decoupled history memos, debounced search transitions, and eliminated full-table Dexie scans and UI flicker while typing.
+  - Accelerated app startup and navigation with lazy-loaded heavy drawers, debounced scroll persistence, warm-only OPFS preloading, and non-blocking route transitions.
+  - Introduced tiered liquid glass rendering and removed nested modal backdrop blurs for smoother 60fps animations across desktop and mobile.
+  - Optimized mobile `VisualViewportSync` by diffing DOM writes, dropping redundant scroll listeners, and coalescing focus timers.
+
+### Fixed
+- **UI & Keyboard Navigation**: Resolved scroll-position resets, cold-load opacity flashes, and clamped `ArrowUp` keyboard navigation in search results.
+- **Portion Panel Typing**: Aligned `FoodPortionPanel` typing with `ReturnType<typeof scaleFoodByOption>`.
+
+### Documentation
+- Synced `README.md`, `CONTRIBUTING.md`, and `DATA_LICENSES.md` with the expanded built-in food catalog and updated compiler/auditing workflows.
+
 ## [v0.2.5] - 2026-11-25
 
 ### Added
@@ -111,6 +135,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added GitHub community health files: Code of Conduct, Contributing guide, Issue templates, Pull Request template, and Security Policy.
 - Added self-hosting setup guide and environment variable documentation.
 
+[v0.2.6]: https://github.com/NathanP278/openCalory/compare/v0.2.5...v0.2.6
 [v0.2.5]: https://github.com/NathanP278/openCalory/compare/v0.2.0...v0.2.5
 [v0.2.0]: https://github.com/NathanP278/openCalory/compare/v0.1.0...v0.2.0
 [v0.1.0]: https://github.com/NathanP278/openCalory/releases/tag/v0.1.0
