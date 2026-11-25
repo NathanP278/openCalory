@@ -6,7 +6,7 @@ The compiled openCalory food catalog artifacts (`food-catalog.db` and `food-cata
 
 ## Built-In Core Catalog Sources (Current Build)
 
-The committed Core catalog (`public/data/food-catalog.db.gz`, 147,674 deduplicated foods from 170,051 raw records) compiles and deduplicates the following open datasets:
+The committed Core catalog (`public/data/food-catalog.db.gz`, 130,362 deeply deduplicated foods from 170,051 raw records) compiles and deduplicates the following open datasets:
 
 | Dataset | Publisher / Maintainer | License | Region | Raw Records Contributed |
 | --- | --- | --- | --- | --- |

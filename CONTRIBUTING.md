@@ -40,7 +40,7 @@ Before making changes, please keep these core principles in mind:
    cp .env.example .env.local
    ```
 
-   All environment variables are optional for local development—the app works out of the box with IndexedDB, the bundled 147,674-food SQLite FTS5 catalog, and a local SQLite sync database (`opencalory.db`).
+   All environment variables are optional for local development—the app works out of the box with IndexedDB, the bundled 130,362-food SQLite FTS5 catalog, and a local SQLite sync database (`opencalory.db`).
 
 4. Start the development server:
 
